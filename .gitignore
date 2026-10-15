@@ -18,6 +18,8 @@
 [Xx]64/
 [Xx]86/
 [Bb]uild/
+# Release packages for the download (attach them to a GitHub release)
+/dist/
 bld/
 [Bb]in/
 [Oo]bj/

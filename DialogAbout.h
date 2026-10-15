@@ -21,4 +21,5 @@ protected:
 public:
 	afx_msg void OnNMClickSyslinkUrl1(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnNMClickSyslinkUrl2(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnNMClickSyslinkUrl3(NMHDR *pNMHDR, LRESULT *pResult);
 };

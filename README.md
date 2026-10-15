@@ -5,7 +5,12 @@ DiskLED comes with a graphical configuration dialog that lets you choose from al
 
 ## Documentation and Release Builds
 
-The documentation and compiled release builds can be found [here](https://helgeklein.com/free-tools/diskled/).
+This is a fork of [DiskLED by Helge Klein](https://github.com/helgeklein/DiskLED) with more icon types, colours, a second counter, warnings and other improvements, see below. Thank you, Helge, for the original.
+
+- **Download this version:** [releases](https://github.com/lvlaanderen/DiskLED/releases). Unzip it to a folder where you can write, DiskLED stores its configuration next to the executable. Use the `x64` zip on 64-bit Windows, otherwise the `x86` one.
+- **The original:** documentation and release builds of the original DiskLED can be found [here](https://helgeklein.com/free-tools/diskled/).
+
+Both versions are licensed under the Apache License 2.0, see `LICENSE`.
 
 ## Settings
 

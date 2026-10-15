@@ -1,4 +1,45 @@
-Release notes for DiskLED by Helge Klein, https://helgeklein.com
+Release notes for DiskLED 2.0, a fork by Lourens Vlaanderen of DiskLED by Helge Klein
+
+This version (downloads and source): https://github.com/lvlaanderen/DiskLED
+The original DiskLED by Helge Klein:  https://helgeklein.com/free-tools/diskled/
+
+DiskLED is licensed under the Apache License 2.0, see LICENSE.txt.
+
+
+#### Version 2.0.0 (fork) ####
+
+Based on the source code of DiskLED 1.1.1 by Helge Klein.
+
+New icon types. All icons are now drawn at runtime, so they follow your colours:
+- LED, Bar (Task Manager style), Clean bar, VU meter, Graph and Number
+- Choose the colours for low, medium and high load, and the percentages where they change
+- A live preview in the configuration dialog
+
+Showing numbers and units:
+- The tooltip always shows the current value
+- Value formats: percent, plain number, bytes/s, bits/s and megabytes (MB/GB/TB)
+- Invert: show the 100% value minus the counter, e.g. memory used from memory available
+- Scale: fixed, peak of the last 16 values, or a peak that slowly decays
+
+Two counters:
+- Show a second counter, e.g. download and upload speed
+- Bar types share one icon, the graph uses one icon with two halves, the number gets two tray icons
+
+Warnings:
+- Show a notification when a value stays above a threshold for a set time
+
+Other improvements:
+- "Start with Windows" option in the configuration dialog (per user, no admin rights needed)
+- Counter paths in the INI file are stored in English and work on any Windows language. Paths in the system language from older versions still work.
+- If the counters cannot be read, DiskLED shows the red exclamation mark with the problem in the tooltip and keeps trying to reconnect
+- Percentage counters are no longer capped at 100%
+- Settings in the INI are validated, applying settings that do not work keeps the previous ones
+- Built with Visual Studio 2022, requires Windows 7 or later (the x64 build needs a 64-bit Windows)
+
+Settings in DiskLED.ini from older versions keep working.
+
+
+#### Original release notes by Helge Klein ####
 
 DiskLED homepage: https://helgeklein.com/free-tools/
 

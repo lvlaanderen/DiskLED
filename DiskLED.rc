@@ -88,23 +88,27 @@ IDI_ICON11              ICON                    "res\\icon11.ico"
 // Dialog
 //
 
-IDD_DIALOG_ABOUT DIALOGEX 0, 0, 250, 135
+IDD_DIALOG_ABOUT DIALOGEX 0, 0, 250, 192
 STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "About DiskLED"
 FONT 10, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
-    DEFPUSHBUTTON   "OK",IDOK,192,114,50,14
+    DEFPUSHBUTTON   "OK",IDOK,192,172,50,14
     ICON            IDI_ICON5,IDC_ABOUT_ICON1,12,12,18,16
-    CONTROL         "DiskLED by Helge Klein (<a href=""https://helgeklein.com/"" target=""_blank"">https://helgeklein.com/</a>)",IDC_SYSLINK_URL1,
+    CONTROL         "Original DiskLED by Helge Klein (<a href=""https://helgeklein.com/"" target=""_blank"">https://helgeklein.com/</a>)",IDC_SYSLINK_URL1,
                     "SysLink",WS_TABSTOP,48,18,192,12
     CONTROL         "<a href=""https://helgeklein.com/free-tools/diskled/"" target=""_blank"">https://helgeklein.com/free-tools/diskled/</a>",IDC_SYSLINK_URL2,
                     "SysLink",WS_TABSTOP,48,48,192,12
-    LTEXT           "Homepage of DiskLED:",IDC_TEXT2,48,36,104,8
+    LTEXT           "Homepage of the original DiskLED:",IDC_TEXT2,48,36,192,8
     ICON            IDI_ICON4,IDC_ABOUT_ICON2,12,30,18,16
     ICON            IDI_ICON3,IDC_ABOUT_ICON3,12,48,18,16
     ICON            IDI_ICON2,IDC_ABOUT_ICON4,12,66,18,16
     ICON            IDI_ICON1,IDC_ABOUT_ICON5,12,84,18,16
     LTEXT           "DiskLED is a flexible system activity indicator applet for the system tray. It can display data from any performance counter. By default, it displays disk activity by flickering, just as the physical hard disk LED in many computer cases.",IDC_TEXT3,48,66,192,42,0,WS_EX_TRANSPARENT
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,12,112,228,1
+    LTEXT           "This is DiskLED 2.0, a fork of Helge Klein's DiskLED by Lourens Vlaanderen. It adds more icon types, colours, a second counter, warnings and other improvements, and uses the same Apache 2.0 license. Thank you, Helge, for the original!",IDC_TEXT4,12,118,228,42
+    CONTROL         "Download and source of this version: <a href=""https://github.com/lvlaanderen/DiskLED/releases"" target=""_blank"">releases</a>, <a href=""https://github.com/lvlaanderen/DiskLED"" target=""_blank"">repository</a>",IDC_SYSLINK_URL3,
+                    "SysLink",WS_TABSTOP,12,154,228,12
 END
 
 IDD_DIALOG_CONFIG DIALOGEX 0, 0, 345, 418
@@ -264,8 +268,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,1,0,0
- PRODUCTVERSION 1,1,0,0
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -280,14 +284,14 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Helge Klein"
-            VALUE "FileDescription", "Hard disk activity LED"
-            VALUE "FileVersion", "1.1"
+            VALUE "CompanyName", "Helge Klein (original), Lourens Vlaanderen (fork)"
+            VALUE "FileDescription", "System tray performance counter indicator"
+            VALUE "FileVersion", "2.0"
             VALUE "InternalName", "DiskLED.exe"
-            VALUE "LegalCopyright", "(c) Helge Klein.  All rights reserved."
+            VALUE "LegalCopyright", "(c) Helge Klein. Fork changes (c) Lourens Vlaanderen. Apache License 2.0."
             VALUE "OriginalFilename", "DiskLED.exe"
             VALUE "ProductName", "DiskLED"
-            VALUE "ProductVersion", "1.1"
+            VALUE "ProductVersion", "2.0"
         END
     END
     BLOCK "VarFileInfo"
