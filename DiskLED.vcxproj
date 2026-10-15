@@ -228,7 +228,9 @@
     <ClCompile Include="DialogConfig.cpp" />
     <ClCompile Include="DiskLED.cpp" />
     <ClCompile Include="Helpers.cpp" />
+    <ClCompile Include="IconRenderer.cpp" />
     <ClCompile Include="MainFrm.cpp" />
+    <ClCompile Include="Settings.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -242,7 +244,9 @@
     <ClInclude Include="DialogConfig.h" />
     <ClInclude Include="DiskLED.h" />
     <ClInclude Include="Helpers.h" />
+    <ClInclude Include="IconRenderer.h" />
     <ClInclude Include="MainFrm.h" />
+    <ClInclude Include="Settings.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="SystemTray.h" />

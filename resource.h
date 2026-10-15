@@ -22,9 +22,8 @@
 #define IDI_ICON9                       144
 #define IDD_DIALOG_CONFIG               144
 #define IDI_ICON10                      145
-#define IDS_TOOLTIP_LEDTYPE1            145
+#define IDS_TOOLTIP_ICONTYPE            145
 #define IDI_ICON11                      146
-#define IDS_TOOLTIP_LEDTYPE2            146
 #define IDS_TOOLTIP_UPDATE_FREQUENCY    147
 #define IDS_TOOLTIP_UPDATE_INI          148
 #define IDS_TOOLTIP_DEFAULT_VALUES      149
@@ -34,16 +33,24 @@
 #define IDS_TOOLTIP_OBJECTS             153
 #define IDS_TOOLTIP_COUNTERS            154
 #define IDS_TOOLTIP_INSTANCES           155
+#define IDS_TOOLTIP_VALUEFORMAT         157
+#define IDS_TOOLTIP_INVERT              160
+#define IDS_TOOLTIP_COLORS              161
+#define IDS_TOOLTIP_THRESHOLDS          162
+#define IDS_TOOLTIP_AUTOSTART           163
+#define IDS_TOOLTIP_COUNTERSEL          164
+#define IDS_TOOLTIP_COUNTER2            165
+#define IDS_TOOLTIP_SCALEMODE           166
+#define IDS_TOOLTIP_ALERT               167
+#define IDR_POPUP_MENU2                 168
 #define IDC_ABOUT_ICON1                 1000
 #define IDC_SYSLINK_URL1                1001
 #define IDC_SYSLINK_URL2                1002
 #define IDC_ABOUT_ICON2                 1003
 #define IDC_TEXT2                       1004
-#define IDC_RADIO_LEDTYPE1              1004
 #define IDC_ABOUT_ICON3                 1005
 #define IDC_GROUP_LEDTYPE               1005
 #define IDC_ABOUT_ICON4                 1006
-#define IDC_RADIO_LEDTYPE2              1006
 #define IDC_ABOUT_ICON5                 1009
 #define IDC_TEXT3                       1011
 #define IDC_UPDATEFREQUENCY_EDIT        1011
@@ -65,6 +72,22 @@
 #define IDC_COUNTERPATH_TEXT3           1026
 #define IDC_COUNTERPATH_TEXT4           1029
 #define IDC_COUNTERPATH_TEXT5           1031
+#define IDC_VALUEFORMAT_TEXT            1033
+#define IDC_COMBO_VALUEFORMAT           1034
+#define IDC_COMBO_ICONTYPE              1036
+#define IDC_CHECK_INVERT                1037
+#define IDC_COLOR_LOW                   1038
+#define IDC_COLOR_MID                   1039
+#define IDC_COLOR_HIGH                  1040
+#define IDC_EDIT_THRESHOLD_MID          1041
+#define IDC_EDIT_THRESHOLD_HIGH         1042
+#define IDC_CHECK_AUTOSTART             1043
+#define IDC_COMBO_COUNTERSEL            1044
+#define IDC_CHECK_COUNTER2              1045
+#define IDC_COMBO_SCALEMODE             1046
+#define IDC_EDIT_ALERT_PERCENT          1047
+#define IDC_EDIT_ALERT_SECONDS          1048
+#define IDC_PREVIEW                     1049
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -77,9 +100,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        152
+#define _APS_NEXT_RESOURCE_VALUE        169
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1026
+#define _APS_NEXT_CONTROL_VALUE         1050
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

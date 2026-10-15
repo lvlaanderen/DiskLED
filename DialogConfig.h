@@ -1,5 +1,12 @@
 #pragma once
 #include "afxwin.h"
+#include "Settings.h"
+#include "IconRenderer.h"
+
+
+// Animation of the preview
+#define PREVIEW_TIMER_ID		1
+#define PREVIEW_INTERVAL_MS		120
 
 
 // CDialogConfig dialog
@@ -23,8 +30,19 @@ protected:
 
 private:
 	// Control object variables
-	CButton		m_cLEDType1;
-	CButton		m_cLEDType2;
+	CComboBox	m_cCounterSel;
+	CButton		m_cSecondCounter;
+	CComboBox	m_cIconType;
+	CComboBox	m_cValueFormat;
+	CComboBox	m_cScaleMode;
+	CButton		m_cInvert;
+	CEdit		m_cAlertPercent;
+	CEdit		m_cAlertSeconds;
+	CButton		m_cAutoStart;
+	CButton		m_cColor[3];
+	CEdit		m_cThresholdMid;
+	CEdit		m_cThresholdHigh;
+	CStatic		m_cPreview;
 	CStatic		m_cUpdateFrequencyText1;
 	CStatic		m_cUpdateFrequencyText2;
 	CEdit		m_cUpdateFrequencyEdit;
@@ -39,11 +57,22 @@ private:
 	CEdit		m_cSelectPerfDescription;
 
 	// Control value variables
-	int			m_nLEDType;
+	int			m_nCounterSel;			// Which counter the counter settings controls show: 0 or 1
+	int			m_nSecondCounter;
+	int			m_nLEDType;				// Icon type - 1
+	int			m_nValueFormat;			// Value format - 1
+	int			m_nScaleMode;			// Scale mode - 1
+	int			m_nInvert;
+	int			m_nAlertPercent;
+	int			m_nAlertSeconds;
+	int			m_nAutoStart;
+	COLORREF	m_anColors[3];
+	int			m_nThresholdMid;
+	int			m_nThresholdHigh;
 	DWORD		m_nUpdateFrequency;
 	int			m_nUpdateINI;
 	double		m_d100Percent;
-	CString		m_sCounterPath;
+	CString		m_sCounterPath;			// In the system language
 	CString		m_sPerfObject;
 	CString		m_sPerfCounter;
 	CString		m_sPerfInstance;
@@ -53,8 +82,18 @@ private:
 	CToolTipCtrl	m_oToolTip;
 
 	// Member variables
-	CMainFrame*	m_pMainFrame;
-	CString		m_sSelectedPerfPath;
+	CMainFrame*		m_pMainFrame;
+	CString			m_sSelectedPerfPath;
+
+	// The settings being edited. The counter settings controls show the counter selected in m_nCounterSel,
+	// the other counter's settings are kept here until it is selected.
+	DiskLEDSettings	m_oSettings;
+
+	// Preview
+	IconStyle		m_oPreviewStyle;
+	IconCounter		m_aPreview[2];
+	int				m_nPreviewCounters;
+	double			m_dPreviewTime;
 
 	// Memory buffers for PdhEnumObjectItems
 	TCHAR*		m_sBufferCounters;
@@ -68,8 +107,15 @@ private:
 
 	// Functions
 	BOOL		OnInitDialog ();
-	void		ApplySettings ();
+	BOOL		ApplySettings ();
+	void		LoadGlobalToControls ();
+	void		SaveGlobalFromControls ();
+	void		LoadCounterToControls (int nCounter);
+	void		SaveControlsToCounter (int nCounter);
+	void		UpdateSwatches ();
+	void		UpdatePreview ();
 	void		InitPerfBrowser ();
+	void		SelectPathInBrowser ();
 	DWORD		SplitPerfPath (CString sCounterPath, CString& sObject, CString& sCounter, CString& sInstance);
 	DWORD		BuildPerfPath (CString& sCounterPath, CString sObject, CString sCounter, CString sInstance);
 	DWORD		GetCounterExplainText (CString sCounterPath, CString& sExplainText);
@@ -79,10 +125,13 @@ public:
 	afx_msg void OnBnClickedDefaultvalues();
 	afx_msg void OnBnClickedCancel();
 	afx_msg void OnBnClickedApply();
-	//afx_msg void OnBnClickedCounterpathSelect();
+	afx_msg void OnColorButton(UINT nID);
+	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnDestroy();
+	afx_msg void OnCbnSelchangeCounterSel();
 	afx_msg void OnCbnSelchangePerfObjects();
 	afx_msg void OnBnClickedUseSelectedDataSource();
 	afx_msg void OnCbnSelchangePerfCounters();
 	afx_msg void OnCbnSelchangePerfInstances();
 };
-

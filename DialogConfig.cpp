@@ -6,6 +6,7 @@
 #include "MainFrm.h"
 #include "DialogConfig.h"
 #include "Helpers.h"
+#include <math.h>
 
 
 // CDialogConfig dialog
@@ -13,7 +14,11 @@
 IMPLEMENT_DYNAMIC(CDialogConfig, CDialog)
 
 CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::IDD, pMainFrame)
+														, m_nCounterSel(0), m_nSecondCounter(0)
 														, m_nLEDType(0), m_nUpdateFrequency(0)
+														, m_nValueFormat(0), m_nScaleMode(0), m_nInvert(0), m_nAutoStart(0)
+														, m_nAlertPercent(0), m_nAlertSeconds(0)
+														, m_nThresholdMid(0), m_nThresholdHigh(0)
 														, m_nUpdateINI(0)
 														, m_d100Percent(0)
 														, m_sCounterPath(_T(""))
@@ -21,6 +26,8 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_sPerfCounter(_T(""))
 														, m_sPerfInstance(_T(""))
 														, m_sPerfDescription(_T(""))
+														, m_nPreviewCounters(1)
+														, m_dPreviewTime(0)
 {
 	if (pMainFrame)
 	{
@@ -30,6 +37,11 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 	{
 		m_pMainFrame	= NULL;
 	}
+
+	SetDefaultSettings (m_oSettings);
+	SecureZeroMemory (m_anColors, sizeof (m_anColors));
+	SecureZeroMemory (&m_oPreviewStyle, sizeof (m_oPreviewStyle));
+	SecureZeroMemory (m_aPreview, sizeof (m_aPreview));
 
 	// Memory buffers for PdhEnumObjectItems
 	m_sBufferCounters	= NULL;
@@ -65,8 +77,32 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 
-	DDX_Control(pDX, IDC_RADIO_LEDTYPE1, m_cLEDType1);
-	DDX_Control(pDX, IDC_RADIO_LEDTYPE2, m_cLEDType2);
+	DDX_Control(pDX, IDC_COMBO_COUNTERSEL, m_cCounterSel);
+	DDX_CBIndex(pDX, IDC_COMBO_COUNTERSEL, m_nCounterSel);
+	DDX_Control(pDX, IDC_CHECK_COUNTER2, m_cSecondCounter);
+	DDX_Check(pDX, IDC_CHECK_COUNTER2, m_nSecondCounter);
+	DDX_Control(pDX, IDC_COMBO_ICONTYPE, m_cIconType);
+	DDX_CBIndex(pDX, IDC_COMBO_ICONTYPE, m_nLEDType);
+	DDX_Control(pDX, IDC_COMBO_VALUEFORMAT, m_cValueFormat);
+	DDX_CBIndex(pDX, IDC_COMBO_VALUEFORMAT, m_nValueFormat);
+	DDX_Control(pDX, IDC_COMBO_SCALEMODE, m_cScaleMode);
+	DDX_CBIndex(pDX, IDC_COMBO_SCALEMODE, m_nScaleMode);
+	DDX_Control(pDX, IDC_CHECK_INVERT, m_cInvert);
+	DDX_Check(pDX, IDC_CHECK_INVERT, m_nInvert);
+	DDX_Control(pDX, IDC_EDIT_ALERT_PERCENT, m_cAlertPercent);
+	DDX_Text(pDX, IDC_EDIT_ALERT_PERCENT, m_nAlertPercent);
+	DDX_Control(pDX, IDC_EDIT_ALERT_SECONDS, m_cAlertSeconds);
+	DDX_Text(pDX, IDC_EDIT_ALERT_SECONDS, m_nAlertSeconds);
+	DDX_Control(pDX, IDC_CHECK_AUTOSTART, m_cAutoStart);
+	DDX_Check(pDX, IDC_CHECK_AUTOSTART, m_nAutoStart);
+	DDX_Control(pDX, IDC_COLOR_LOW, m_cColor[0]);
+	DDX_Control(pDX, IDC_COLOR_MID, m_cColor[1]);
+	DDX_Control(pDX, IDC_COLOR_HIGH, m_cColor[2]);
+	DDX_Control(pDX, IDC_EDIT_THRESHOLD_MID, m_cThresholdMid);
+	DDX_Control(pDX, IDC_EDIT_THRESHOLD_HIGH, m_cThresholdHigh);
+	DDX_Text(pDX, IDC_EDIT_THRESHOLD_MID, m_nThresholdMid);
+	DDX_Text(pDX, IDC_EDIT_THRESHOLD_HIGH, m_nThresholdHigh);
+	DDX_Control(pDX, IDC_PREVIEW, m_cPreview);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_TEXT1, m_cUpdateFrequencyText1);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_TEXT2, m_cUpdateFrequencyText2);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_EDIT, m_cUpdateFrequencyEdit);
@@ -75,7 +111,6 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_100PERCENT_EDIT, m_c100Percent);
 	DDX_Control(pDX, IDC_COUNTERPATH_EDIT, m_cCounterPath);
 
-	DDX_Radio(pDX, IDC_RADIO_LEDTYPE1, m_nLEDType);
 	DDX_Text(pDX, IDC_UPDATEFREQUENCY_EDIT, m_nUpdateFrequency);
 	DDX_Text(pDX, IDC_100PERCENT_EDIT, m_d100Percent);
 	DDX_Check (pDX, IDC_UPDATE_INI, m_nUpdateINI);
@@ -109,10 +144,83 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_BN_CLICKED(IDCANCEL, &CDialogConfig::OnBnClickedCancel)
 	ON_BN_CLICKED(IDC_APPLY, &CDialogConfig::OnBnClickedApply)
 	ON_BN_CLICKED(IDC_USE_SELECTED_DATA_SOURCE, &CDialogConfig::OnBnClickedUseSelectedDataSource)
+	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
+	ON_WM_DRAWITEM()
+	ON_WM_TIMER()
+	ON_WM_DESTROY()
+	ON_CBN_SELCHANGE(IDC_COMBO_COUNTERSEL, &CDialogConfig::OnCbnSelchangeCounterSel)
 	ON_CBN_SELCHANGE(IDC_PERF_OBJECTS, &CDialogConfig::OnCbnSelchangePerfObjects)
 	ON_CBN_SELCHANGE(IDC_PERF_COUNTERS, &CDialogConfig::OnCbnSelchangePerfCounters)
 	ON_CBN_SELCHANGE(IDC_PERF_INSTANCES, &CDialogConfig::OnCbnSelchangePerfInstances)
 END_MESSAGE_MAP()
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Settings <-> controls
+//	The settings that do not belong to a counter, and the settings of the counter being edited
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::LoadGlobalToControls ()
+{
+	m_nLEDType			= m_oSettings.nIconType - 1;
+	m_nUpdateFrequency	= m_oSettings.nUpdateInterval;
+	m_nSecondCounter	= m_oSettings.bSecondCounter ? 1 : 0;
+	m_nThresholdMid		= m_oSettings.nThresholdMid;
+	m_nThresholdHigh	= m_oSettings.nThresholdHigh;
+	for (int i = 0; i < 3; i++)
+	{
+		m_anColors[i]	= m_oSettings.anColors[i];
+	}
+}
+
+void CDialogConfig::SaveGlobalFromControls ()
+{
+	m_oSettings.nIconType		= m_nLEDType + 1;
+	m_oSettings.nUpdateInterval	= m_nUpdateFrequency;
+	m_oSettings.bSecondCounter	= (m_nSecondCounter != 0);
+	m_oSettings.nThresholdMid	= m_nThresholdMid;
+	m_oSettings.nThresholdHigh	= m_nThresholdHigh;
+	for (int i = 0; i < 3; i++)
+	{
+		m_oSettings.anColors[i]	= m_anColors[i];
+	}
+}
+
+void CDialogConfig::LoadCounterToControls (int nCounter)
+{
+	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
+
+	m_sCounterPath		= EnglishPathToLocal (oCounter.sPath);
+	m_d100Percent		= oCounter.d100Percent;
+	m_nValueFormat		= oCounter.nValueFormat - 1;
+	m_nScaleMode		= oCounter.nScaleMode - 1;
+	m_nInvert			= oCounter.bInvert ? 1 : 0;
+	m_nAlertPercent		= oCounter.nAlertPercent;
+	m_nAlertSeconds		= oCounter.nAlertSeconds;
+}
+
+void CDialogConfig::SaveControlsToCounter (int nCounter)
+{
+	CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
+
+	oCounter.sPath			= m_sCounterPath.IsEmpty () ? m_sCounterPath : LocalPathToEnglish (m_sCounterPath);
+	oCounter.d100Percent	= m_d100Percent;
+	oCounter.nValueFormat	= m_nValueFormat + 1;
+	oCounter.nScaleMode		= m_nScaleMode + 1;
+	oCounter.bInvert		= (m_nInvert != 0);
+	oCounter.nAlertPercent	= m_nAlertPercent;
+	oCounter.nAlertSeconds	= m_nAlertSeconds;
+}
+
+void CDialogConfig::UpdateSwatches ()
+{
+	for (int i = 0; i < 3; i++)
+	{
+		m_cColor[i].Invalidate ();
+	}
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -129,8 +237,21 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Set up tooltip support
 	if (m_oToolTip.Create (this))
 	{
-		m_oToolTip.AddTool (&m_cLEDType1, IDS_TOOLTIP_LEDTYPE1);
-		m_oToolTip.AddTool (&m_cLEDType2, IDS_TOOLTIP_LEDTYPE2);
+		m_oToolTip.AddTool (&m_cCounterSel, IDS_TOOLTIP_COUNTERSEL);
+		m_oToolTip.AddTool (&m_cSecondCounter, IDS_TOOLTIP_COUNTER2);
+		m_oToolTip.AddTool (&m_cIconType, IDS_TOOLTIP_ICONTYPE);
+		m_oToolTip.AddTool (&m_cValueFormat, IDS_TOOLTIP_VALUEFORMAT);
+		m_oToolTip.AddTool (&m_cScaleMode, IDS_TOOLTIP_SCALEMODE);
+		m_oToolTip.AddTool (&m_cInvert, IDS_TOOLTIP_INVERT);
+		m_oToolTip.AddTool (&m_cAlertPercent, IDS_TOOLTIP_ALERT);
+		m_oToolTip.AddTool (&m_cAlertSeconds, IDS_TOOLTIP_ALERT);
+		m_oToolTip.AddTool (&m_cAutoStart, IDS_TOOLTIP_AUTOSTART);
+		for (int i = 0; i < 3; i++)
+		{
+			m_oToolTip.AddTool (&m_cColor[i], IDS_TOOLTIP_COLORS);
+		}
+		m_oToolTip.AddTool (&m_cThresholdMid, IDS_TOOLTIP_THRESHOLDS);
+		m_oToolTip.AddTool (&m_cThresholdHigh, IDS_TOOLTIP_THRESHOLDS);
 		m_oToolTip.AddTool (&m_cUpdateFrequencyEdit, IDS_TOOLTIP_UPDATE_FREQUENCY);
 		m_oToolTip.AddTool (&m_cUpdateINI, IDS_TOOLTIP_UPDATE_INI);
 		m_oToolTip.AddTool (&m_cDefaultValues, IDS_TOOLTIP_DEFAULT_VALUES);
@@ -146,45 +267,63 @@ BOOL CDialogConfig::OnInitDialog ()
 		m_oToolTip.AddTool (&m_cUpdateFrequencyText2, IDS_TOOLTIP_UPDATE_FREQUENCY);
 	}
 
-	// Set icons
-	HICON	hIcon	= LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON5));
-	if (hIcon)
-	{
-		m_cLEDType1.SendMessage (BM_SETIMAGE, IMAGE_ICON, (LPARAM) hIcon);
-	}
-	hIcon	= LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON9));
-	if (hIcon)
-	{
-		m_cLEDType2.SendMessage (BM_SETIMAGE, IMAGE_ICON, (LPARAM) hIcon);
-	}
+	// Counter selection entries
+	m_cCounterSel.AddString (TEXT ("Counter 1"));
+	m_cCounterSel.AddString (TEXT ("Counter 2"));
+
+	// Icon type entries, in the order of the LEDTYPE_* constants
+	m_cIconType.AddString (TEXT ("LED"));
+	m_cIconType.AddString (TEXT ("Bar"));
+	m_cIconType.AddString (TEXT ("Clean bar"));
+	m_cIconType.AddString (TEXT ("VU meter"));
+	m_cIconType.AddString (TEXT ("Graph"));
+	m_cIconType.AddString (TEXT ("Number"));
+
+	// Value format entries, in the order of the VALUEFORMAT_* constants
+	m_cValueFormat.AddString (TEXT ("Percent"));
+	m_cValueFormat.AddString (TEXT ("Number"));
+	m_cValueFormat.AddString (TEXT ("Bytes/s"));
+	m_cValueFormat.AddString (TEXT ("Bits/s"));
+	m_cValueFormat.AddString (TEXT ("MBytes"));
+
+	// Scale mode entries, in the order of the SCALEMODE_* constants
+	m_cScaleMode.AddString (TEXT ("Fixed"));
+	m_cScaleMode.AddString (TEXT ("Peak"));
+	m_cScaleMode.AddString (TEXT ("Decay"));
 
 	// Control value initialization
 	if (m_pMainFrame)
 	{
-		// State of the LED type radio buttons
-		m_nLEDType			= m_pMainFrame->GetLEDType () - 1;
-
-		// Update frequency edit control
-		m_nUpdateFrequency	= m_pMainFrame->GetUpdateFrequency ();
-
-		// 100% value
-		m_d100Percent		= m_pMainFrame->Get100PercentUtilization ();
-
-		// Counter path
-		m_pMainFrame->GetCounterPath (m_sCounterPath);
-
-		// Update the dialog with the data written to the member variables
-		UpdateData (FALSE);
+		m_pMainFrame->GetSettings (m_oSettings);
 	}
+	m_nCounterSel	= 0;
+	m_nAutoStart	= IsAutoStartEnabled () ? 1 : 0;
+	LoadGlobalToControls ();
+	LoadCounterToControls (m_nCounterSel);
+
+	// Update the dialog with the data written to the member variables
+	UpdateData (FALSE);
 
 	// Set the initial focus to the icon type
-	m_cLEDType1.SetFocus ();
+	m_cIconType.SetFocus ();
 
 	// Initialize the performance browser controls
 	InitPerfBrowser ();
 
+	// Start the preview
+	SetTimer (PREVIEW_TIMER_ID, PREVIEW_INTERVAL_MS, NULL);
+	UpdatePreview ();
+
 	// Success
 	return 0;
+}
+
+
+void CDialogConfig::OnDestroy ()
+{
+	KillTimer (PREVIEW_TIMER_ID);
+
+	CDialog::OnDestroy ();
 }
 
 
@@ -196,9 +335,10 @@ BOOL CDialogConfig::OnInitDialog ()
 
 void CDialogConfig::OnBnClickedOk()
 {
-	ApplySettings ();
-
-	OnOK();
+	if (ApplySettings ())
+	{
+		OnOK();
+	}
 }
 
 
@@ -210,17 +350,17 @@ void CDialogConfig::OnBnClickedOk()
 
 void CDialogConfig::OnBnClickedDefaultvalues()
 {
-	// Get defaults
-	if (m_pMainFrame)
-	{
-		m_pMainFrame->GetLEDDefaults (m_sCounterPath, m_nLEDType, m_nUpdateFrequency, m_d100Percent);
-	}
-
-	// Translate values where necessary
-	m_nLEDType--;
+	// Default settings for everything except the autostart, which is not part of the settings
+	SetDefaultSettings (m_oSettings);
+	m_nCounterSel	= 0;
+	LoadGlobalToControls ();
+	LoadCounterToControls (m_nCounterSel);
 
 	// Update the dialog with the new data
 	UpdateData (FALSE);
+	UpdateSwatches ();
+	SelectPathInBrowser ();
+	UpdatePreview ();
 }
 
 
@@ -238,79 +378,111 @@ void CDialogConfig::OnBnClickedCancel()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Apply the settings from the dialog
+//	Another counter was selected for editing: keep the settings of the previous one, show the settings of the new one
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDialogConfig::ApplySettings ()
+void CDialogConfig::OnCbnSelchangeCounterSel ()
+{
+	int	nPrevious	= m_nCounterSel;
+
+	// Get data from the dialog box into our member variables. m_nCounterSel is now the new counter.
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
+
+	int	nNew	= m_nCounterSel;
+	if (nNew == nPrevious || nNew < 0 || nNew > 1)
+	{
+		m_nCounterSel	= nPrevious;
+		return;
+	}
+
+	SaveControlsToCounter (nPrevious);
+
+	// A counter that was never set up starts with the settings of the other one, e.g. the same adapter and units for download and upload
+	if (m_oSettings.aCounters[nNew].sPath.IsEmpty ())
+	{
+		m_oSettings.aCounters[nNew]			= m_oSettings.aCounters[nPrevious];
+		m_oSettings.aCounters[nNew].sPath	= TEXT ("");
+	}
+
+	LoadCounterToControls (nNew);
+	UpdateData (FALSE);
+	SelectPathInBrowser ();
+	UpdatePreview ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Apply the settings from the dialog. Returns FALSE if the settings are incomplete.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+BOOL CDialogConfig::ApplySettings ()
 {
 	// Get data into our member variables
-	UpdateData (TRUE);
+	if (!UpdateData (TRUE))
+	{
+		return FALSE;
+	}
 
-	// Transmit the settings to the LED
+	SaveControlsToCounter (m_nCounterSel);
+	SaveGlobalFromControls ();
+
+	if (m_oSettings.bSecondCounter && m_oSettings.aCounters[1].sPath.IsEmpty ())
+	{
+		MessageBox (TEXT ("Please select a data source for counter 2, or untick \"Use a second counter\"."), TEXT ("DiskLED: Counter 2"), MB_OK | MB_ICONEXCLAMATION);
+		return FALSE;
+	}
+
+	// Autostart is stored in the registry, not in the INI file
+	DWORD	nAutoStartError	= SetAutoStart (m_nAutoStart != 0);
+	if (nAutoStartError != ERROR_SUCCESS && m_pMainFrame)
+	{
+		m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("SetAutoStart"), nAutoStartError);
+	}
+
 	if (m_pMainFrame)
 	{
-		m_pMainFrame->Initialize (m_sCounterPath, m_nLEDType + 1, m_nUpdateFrequency, m_d100Percent);
+		// Transmit the settings to the LED
+		m_pMainFrame->ApplySettings (m_oSettings);
+
+		// The main window corrects invalid values, show the corrected values
+		m_pMainFrame->GetSettings (m_oSettings);
+		LoadGlobalToControls ();
+		LoadCounterToControls (m_nCounterSel);
+		UpdateData (FALSE);
+		UpdateSwatches ();
+		UpdatePreview ();
+
+		// Store the new settings in the INI file?
+		if (m_nUpdateINI)
+		{
+			CString	sINIFile;
+			m_pMainFrame->GetINIFile (sINIFile);
+
+			DWORD	nError	= SaveSettings (sINIFile, m_oSettings);
+			if (nError != ERROR_SUCCESS)
+			{
+				CString	sExplanation;
+				if (nError == ERROR_ACCESS_DENIED)
+				{
+					sExplanation	= TEXT ("Access denied - could not write to the INI file: <") + sINIFile + TEXT (">");
+				}
+				else
+				{
+					sExplanation	= TEXT ("Could not write to the INI file: <") + sINIFile + TEXT (">");
+				}
+				m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError, sExplanation);
+				return FALSE;
+			}
+		}
 	}
 
-	// Store the new settings in the INI file?
-	if (m_nUpdateINI && m_pMainFrame)
-	{
-		CString	sINIFile;
-		m_pMainFrame->GetINIFile (sINIFile);
-
-		// LED type
-		CString	sLEDType;
-		switch (m_nLEDType + 1)
-		{
-		case LEDTYPE_COLOREDBAR:
-			sLEDType	= LEDTYPE_COLOREDBAR_TEXT;
-			break;
-		default:
-		case LEDTYPE_FLICKER:
-			sLEDType	= LEDTYPE_FLICKER_TEXT;
-			break;
-		}
-		DWORD nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_COUNTER_1_VALUE_LEDTYPE, sLEDType);
-		if (nError != ERROR_SUCCESS)
-		{
-			CString	sExplanation;
-			if (nError == ERROR_ACCESS_DENIED)
-			{
-				sExplanation	= TEXT ("Access denied - could not write to the INI file: <") + sINIFile + TEXT (">");
-			}
-			else
-			{
-				sExplanation	= TEXT ("Could not write to the INI file: <") + sINIFile + TEXT (">");
-			}
-			m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError, sExplanation);
-			return;
-		}
-		
-		// Update frequency
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_COUNTER_1_VALUE_UPDATE_INTERVAL, (int) m_nUpdateFrequency);
-		if (nError != ERROR_SUCCESS)
-		{
-			m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError);
-			return;
-		}
-		
-		// 100% counter value
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_COUNTER_1_VALUE_100PERCENT, (double) m_d100Percent);
-		if (nError != ERROR_SUCCESS)
-		{
-			m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError);
-			return;
-		}
-		
-		// Counter path
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_COUNTER_1_VALUE_PATH, m_sCounterPath);
-		if (nError != ERROR_SUCCESS)
-		{
-			m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError);
-			return;
-		}
-	}
+	return TRUE;
 }
 
 
@@ -328,62 +500,178 @@ void CDialogConfig::OnBnClickedApply()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The button to select a counter path was clicked
+//	A colour swatch was clicked: let the user pick a colour
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/*void CDialogConfig::OnBnClickedCounterpathSelect()
+void CDialogConfig::OnColorButton (UINT nID)
 {
-	PDH_STATUS				pdhStatus;
-	PDH_BROWSE_DLG_CONFIG	oPDHBrowseDialogCfg;
-	TCHAR					sBuffer[PDH_MAX_COUNTER_PATH + 1];
+	int				nIndex	= nID - IDC_COLOR_LOW;
+	CColorDialog	oDialog (m_anColors[nIndex], CC_FULLOPEN | CC_RGBINIT, this);
 
-	// Zero memory structures
-	SecureZeroMemory (&oPDHBrowseDialogCfg, sizeof (PDH_BROWSE_DLG_CONFIG));
-
-	// Initialize the path buffer
-	SecureZeroMemory (&sBuffer, sizeof (sBuffer));
-	//_tcscpy_s (sBuffer, PDH_MAX_COUNTER_PATH + 1, m_sCounterPath);
-
-	// Initialize the browser dialog window settings
-	oPDHBrowseDialogCfg.bIncludeInstanceIndex		= FALSE;   
-	oPDHBrowseDialogCfg.bSingleCounterPerAdd		= TRUE;
-	oPDHBrowseDialogCfg.bSingleCounterPerDialog		= TRUE;
-	oPDHBrowseDialogCfg.bLocalCountersOnly			= FALSE;
-	oPDHBrowseDialogCfg.bWildCardInstances			= TRUE;
-	oPDHBrowseDialogCfg.bHideDetailBox				= TRUE;
-	oPDHBrowseDialogCfg.bInitializePath				= FALSE;
-	oPDHBrowseDialogCfg.bDisableMachineSelection	= FALSE;
-	oPDHBrowseDialogCfg.bIncludeCostlyObjects		= FALSE;
-	oPDHBrowseDialogCfg.bShowObjectBrowser			= FALSE;
-	oPDHBrowseDialogCfg.hWndOwner					= m_hWnd;
-	oPDHBrowseDialogCfg.szReturnPathBuffer			= sBuffer;
-	oPDHBrowseDialogCfg.cchReturnPathLength			= sizeof (sBuffer) / sizeof (TCHAR);
-	oPDHBrowseDialogCfg.pCallBack					= NULL;
-	oPDHBrowseDialogCfg.dwCallBackArg				= 0;
-	oPDHBrowseDialogCfg.CallBackStatus				= ERROR_SUCCESS;
-	oPDHBrowseDialogCfg.dwDefaultDetailLevel		= PERF_DETAIL_WIZARD;
-	oPDHBrowseDialogCfg.szDialogBoxCaption			= TEXT ("Select a counter for DiskLED");
-
-	// Display the counter browser window. The dialog is configured
-	// to return a single selection from the counter list.
-	pdhStatus	= PdhBrowseCounters (&oPDHBrowseDialogCfg);
-	if (pdhStatus != ERROR_SUCCESS)
+	if (oDialog.DoModal () == IDOK)
 	{
-		if (pdhStatus != PDH_DIALOG_CANCELLED)
-		{
-			m_pMainFrame->LogError (TEXT ("OnBnClickedCounterpathSelect"), TEXT ("PdhBrowseCounters"), pdhStatus);
-		}
-	}
-	else
-	{
-		m_sCounterPath	= sBuffer;
-
-		// Update the dialog with the new data
-		UpdateData (FALSE);
+		m_anColors[nIndex]	= oDialog.GetColor ();
+		m_cColor[nIndex].Invalidate ();
 	}
 }
-*/
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Preview: the icon as it would look with the current choices, animated with a test signal
+//	Icon type, colours, thresholds, value format and the second counter are taken from the controls as they are right now
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static double TriangleWave (double dTime, double dPeriod)
+{
+	double	dPhase	= fmod (dTime, dPeriod) / dPeriod;
+
+	return (dPhase < 0.5) ? dPhase * 2.0 : (1.0 - dPhase) * 2.0;
+}
+
+void CDialogConfig::UpdatePreview ()
+{
+	DiskLEDSettings	oSettings;
+	BOOL			bTranslated;
+
+	// Style from the controls, invalid thresholds are corrected like they would be when applying
+	SetDefaultSettings (oSettings);
+	oSettings.nIconType		= m_cIconType.GetCurSel () + 1;
+	oSettings.nThresholdMid		= GetDlgItemInt (IDC_EDIT_THRESHOLD_MID, &bTranslated, FALSE);
+	oSettings.nThresholdHigh	= GetDlgItemInt (IDC_EDIT_THRESHOLD_HIGH, &bTranslated, FALSE);
+	for (int i = 0; i < 3; i++)
+	{
+		oSettings.anColors[i]	= m_anColors[i];
+	}
+	NormalizeSettings (oSettings);
+	MakeIconStyle (oSettings, m_oPreviewStyle);
+
+	// A test signal in the units of the selected value format
+	DWORD	nValueFormat	= m_cValueFormat.GetCurSel () + 1;
+	double	dMax			= 100;
+	switch (nValueFormat)
+	{
+	case VALUEFORMAT_BYTES:
+	case VALUEFORMAT_BITS:
+		dMax	= 12500000;
+		break;
+	case VALUEFORMAT_MBYTES:
+		dMax	= 16384;
+		break;
+	}
+
+	m_nPreviewCounters	= (m_cSecondCounter.GetCheck () == BST_CHECKED) ? 2 : 1;
+	m_dPreviewTime		+= PREVIEW_INTERVAL_MS / 1000.0;
+
+	for (int i = 0; i < 2; i++)
+	{
+		double	dValue	= dMax * TriangleWave (m_dPreviewTime * (i == 0 ? 1.0 : 1.3) + (i == 0 ? 0.0 : 2.5), 10.0);
+
+		memmove (m_aPreview[i].adHistory, m_aPreview[i].adHistory + 1, (HISTORY_SIZE - 1) * sizeof (double));
+		m_aPreview[i].adHistory[HISTORY_SIZE - 1]	= dValue;
+		m_aPreview[i].dValue						= dValue;
+		m_aPreview[i].dScale						= dMax;
+		m_aPreview[i].nValueFormat					= nValueFormat;
+	}
+
+	if (m_cPreview.m_hWnd)
+	{
+		m_cPreview.Invalidate (FALSE);
+	}
+}
+
+void CDialogConfig::OnTimer (UINT_PTR nIDEvent)
+{
+	if (nIDEvent == PREVIEW_TIMER_ID)
+	{
+		UpdatePreview ();
+		return;
+	}
+
+	CDialog::OnTimer (nIDEvent);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Draw the owner-drawn controls: the colour swatches and the preview
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnDrawItem (int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
+{
+	CDC*	pDC		= CDC::FromHandle (lpDrawItemStruct->hDC);
+	CRect	oRect	(lpDrawItemStruct->rcItem);
+
+	if (nIDCtl == IDC_PREVIEW)
+	{
+		int		nSize	= GetSystemMetrics (SM_CXSMICON);
+		int		nZoom	= ((oRect.Width () < oRect.Height () ? oRect.Width () : oRect.Height ()) - 2) / nSize;
+		CDC		oMemDC;
+		CBitmap	oBitmap;
+
+		if (nZoom < 1)
+		{
+			nZoom	= 1;
+		}
+
+		pDC->FillSolidRect (oRect, GetSysColor (COLOR_BTNFACE));
+
+		if (oMemDC.CreateCompatibleDC (pDC) && oBitmap.CreateCompatibleBitmap (pDC, nSize, nSize))
+		{
+			CBitmap*	pOldBitmap	= oMemDC.SelectObject (&oBitmap);
+
+			// The number icon with two counters is two tray icons, shown side by side
+			int			nIcons		= UsesSeparateIcons (m_oPreviewStyle.nType, m_nPreviewCounters) ? 2 : 1;
+
+			// Enlarge without smoothing so the individual pixels are visible
+			pDC->SetStretchBltMode (COLORONCOLOR);
+			for (int i = 0; i < nIcons; i++)
+			{
+				int		nIconZoom	= (oRect.Width () / nIcons - 4) / nSize;
+				int		nAreaLeft	= oRect.left + i * oRect.Width () / nIcons;
+				int		nAreaWidth	= oRect.Width () / nIcons;
+
+				if (nIconZoom < 1)
+				{
+					nIconZoom	= 1;
+				}
+				if (nIcons == 1)
+				{
+					nIconZoom	= nZoom;
+					DrawIconImage (&oMemDC, nSize, m_oPreviewStyle, m_aPreview, m_nPreviewCounters);
+				}
+				else
+				{
+					DrawIconImage (&oMemDC, nSize, m_oPreviewStyle, m_aPreview + i, 1);
+				}
+
+				pDC->StretchBlt (nAreaLeft + (nAreaWidth - nSize * nIconZoom) / 2, oRect.top + (oRect.Height () - nSize * nIconZoom) / 2,
+					nSize * nIconZoom, nSize * nIconZoom, &oMemDC, 0, 0, nSize, nSize, SRCCOPY);
+			}
+
+			oMemDC.SelectObject (pOldBitmap);
+		}
+		return;
+	}
+
+	if (nIDCtl < IDC_COLOR_LOW || nIDCtl > IDC_COLOR_HIGH)
+	{
+		CDialog::OnDrawItem (nIDCtl, lpDrawItemStruct);
+		return;
+	}
+
+	pDC->FillSolidRect (oRect, m_anColors[nIDCtl - IDC_COLOR_LOW]);
+	pDC->Draw3dRect (oRect, GetSysColor (COLOR_BTNSHADOW), GetSysColor (COLOR_BTNSHADOW));
+	if (lpDrawItemStruct->itemState & ODS_FOCUS)
+	{
+		oRect.DeflateRect (2, 2);
+		pDC->DrawFocusRect (oRect);
+	}
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -396,9 +684,6 @@ void CDialogConfig::InitPerfBrowser ()
 	PDH_STATUS		nError			= ERROR_INVALID_FUNCTION;
 	TCHAR*			sBuffer			= NULL;
 	DWORD			nBuffer			= 0;
-	CString			sObject;
-	CString			sInstance;
-	CString			sCounter;
 
 	// Get the size of the buffer required
 	nError	= PdhEnumObjects (NULL, NULL, sBuffer, &nBuffer, PERF_DETAIL_WIZARD, TRUE);
@@ -431,24 +716,47 @@ void CDialogConfig::InitPerfBrowser ()
 		m_cSelectPerfObjects.AddString (sName);
 	}
 
-	// Did we get a counter path to select in the UI?
-	if (m_sCounterPath.GetLength () == 0)
-	{
-		goto CleanUp;
-	}
-
-	if (SplitPerfPath (m_sCounterPath, sObject, sCounter, sInstance) == ERROR_SUCCESS)
-	{
-		// Select the object in the list
-		m_cSelectPerfObjects.SelectString (-1, sObject);
-		OnCbnSelchangePerfObjects ();
-	}
+	// Select the counter path in the UI, if there is one
+	SelectPathInBrowser ();
 
 CleanUp:
 	if (sBuffer)
 	{
 		HeapFree(GetProcessHeap (), 0, sBuffer);
 		sBuffer	= NULL;
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Show the counter path (in the edit box) in the browser: select its object, counter and instance
+//	Without a path, nothing is selected
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::SelectPathInBrowser ()
+{
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	m_cSelectPerfObjects.SetCurSel (-1);
+	m_cSelectPerfCounters.ResetContent ();
+	m_cSelectPerfInstances.ResetContent ();
+
+	if (!m_sCounterPath.IsEmpty () && ParsePerfPath (m_sCounterPath, sMachine, sObject, sInstance, sCounter))
+	{
+		// Select the object in the list. This fills and selects counters and instances.
+		m_cSelectPerfObjects.SelectString (-1, sObject);
+		OnCbnSelchangePerfObjects ();
+	}
+	else
+	{
+		m_sPerfDescription.Empty ();
+		m_sSelectedPerfPath.Empty ();
+		UpdateData (FALSE);
 	}
 }
 
@@ -524,7 +832,7 @@ void CDialogConfig::OnCbnSelchangePerfObjects ()
 		}
 	}
 
-	if (nBufferInstances > m_nBufferInstances)
+	if (nBufferInstances > m_nBufferInstances || m_sBufferInstances == NULL)
 	{
 		// Free memory of previously allocated
 		if (m_sBufferInstances)
@@ -533,8 +841,8 @@ void CDialogConfig::OnCbnSelchangePerfObjects ()
 			m_sBufferInstances	= NULL;
 		}
 
-		// Allocate more than required
-		m_nBufferInstances	= nBufferInstances * 2;
+		// Allocate more than required (objects without instances, e.g. Memory, report a size of 0 but still need a valid buffer)
+		m_nBufferInstances	= (nBufferInstances > 1) ? nBufferInstances * 2 : 2;
 		nBufferInstances	= m_nBufferInstances;
 
 		m_sBufferInstances		= (TCHAR*) HeapAlloc (GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof (TCHAR) * m_nBufferInstances);
@@ -623,42 +931,12 @@ CleanUp:
 
 DWORD CDialogConfig::SplitPerfPath (CString sCounterPath, CString& sObject, CString& sCounter, CString& sInstance)
 {
-	CStringArray	asPathElements;
-	CString			sObjectAndInstance;
+	CString	sMachine;
 
-	// Split the counter path string in its components, e.g.: \PhysicalDisk(_Total)\% Disk Time
-	if (! Split (TEXT ("\\"), sCounterPath, &asPathElements))
+	if (!ParsePerfPath (sCounterPath, sMachine, sObject, sInstance, sCounter))
 	{
-		m_pMainFrame->LogError (TEXT ("SplitPerfPath"), TEXT ("Split failed!"), 0);
+		m_pMainFrame->LogError (TEXT ("SplitPerfPath"), TEXT ("The counter path could not be split into its elements!"), 0);
 		return ERROR_INVALID_FUNCTION;
-	}
-	if (asPathElements.GetSize () == 3)
-	{
-		sObjectAndInstance	= asPathElements.GetAt (1);
-		sCounter			= asPathElements.GetAt (2);
-	}
-	else if (asPathElements.GetSize () == 5)
-	{
-		sObjectAndInstance	= asPathElements.GetAt (3);
-		sCounter			= asPathElements.GetAt (4);
-	}
-	else
-	{
-		m_pMainFrame->LogError (TEXT ("SplitPerfPath"), TEXT ("Split returned an incorrect number of elements!"), 0);
-		return ERROR_INVALID_FUNCTION;
-	}
-
-	// Separate object from instance, e.g.: PhysicalDisk(_Total)
-	int	nIndex	= sObjectAndInstance.Find ('(');
-	if (nIndex != -1)
-	{
-		sObject		= sObjectAndInstance.Left (nIndex);
-		sInstance	= sObjectAndInstance.Mid (nIndex + 1, sObjectAndInstance.GetLength () - nIndex - 2);
-	}
-	else
-	{
-		// No instance
-		sObject	= sObjectAndInstance;
 	}
 
 	return ERROR_SUCCESS;
@@ -751,9 +1029,6 @@ void CDialogConfig::OnBnClickedUseSelectedDataSource()
 		return;
 	}
 
-	// Build a path
-	// BuildPerfPath (m_sCounterPath, m_sPerfObject, m_sPerfCounter, m_sPerfInstance);
-
 	// Use the path already built (and tested!)
 	m_sCounterPath	= m_sSelectedPerfPath;
 
@@ -796,7 +1071,7 @@ DWORD CDialogConfig::GetCounterExplainText (CString sCounterPath, CString& sExpl
 		CString	sExplanation;
 		if (nError == PDH_CSTATUS_NO_OBJECT || nError == PDH_CSTATUS_NO_COUNTER)
 		{
-			sExplanation	= TEXT ("This probably means that the performance counter path is invalid.\nPlease take note that it must be localized. The default path used (if no config file is specified) is valid on English systems only.");
+			sExplanation	= TEXT ("This probably means that the performance counter path is invalid: <") + sCounterPath + TEXT (">");
 		}
 		else if (nError == PDH_CSTATUS_BAD_COUNTERNAME)
 		{

@@ -1,5 +1,8 @@
 #include "stdafx.h"
 #include "Helpers.h"
+#include <pdh.h>
+
+#pragma comment(lib, "pdh.lib")
 
 
 //////////////////////////////////////////////////////////////////////
@@ -229,7 +232,310 @@ BOOL Split (CString sDelimiter, CString sInput, CStringArray* asOutput)
 
 //////////////////////////////////////////////////////////////////////
 //
-//	Select the item in a combo box list that contains a given string
+//      Performance counter paths
+//      Counter names are localized. Windows keeps the English names in the registry,
+//      which lets the settings use English paths that work on any system language.
+//
+//////////////////////////////////////////////////////////////////////
+
+static CMap<DWORD, DWORD, CString, LPCTSTR>		g_oEnglishNames;		// Index -> English name
+static CMap<CString, LPCTSTR, DWORD, DWORD>		g_oEnglishIndexes;		// Lower-case English name -> index
+static BOOL										g_bEnglishNamesLoaded	= FALSE;
+
+static void LoadEnglishNames ()
+{
+	if (g_bEnglishNamesLoaded)
+	{
+		return;
+	}
+	g_bEnglishNamesLoaded	= TRUE;
+
+	HKEY	hKey	= NULL;
+	if (RegOpenKeyEx (HKEY_LOCAL_MACHINE, TEXT ("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\009"), 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+	{
+		return;
+	}
+
+	DWORD	nSize	= 0;
+	DWORD	nType	= 0;
+	if (RegQueryValueEx (hKey, TEXT ("Counter"), NULL, &nType, NULL, &nSize) == ERROR_SUCCESS && nType == REG_MULTI_SZ && nSize > 0)
+	{
+		TCHAR*	pBuffer	= (TCHAR*) HeapAlloc (GetProcessHeap (), HEAP_ZERO_MEMORY, nSize + 2 * sizeof (TCHAR));
+		if (pBuffer && RegQueryValueEx (hKey, TEXT ("Counter"), NULL, &nType, (LPBYTE) pBuffer, &nSize) == ERROR_SUCCESS)
+		{
+			// The value is a list of string pairs: index, name
+			for (const TCHAR* p = pBuffer; *p != 0; )
+			{
+				DWORD	nIndex	= (DWORD) _ttoi (p);
+				p				+= _tcslen (p) + 1;
+				if (*p == 0)
+				{
+					break;
+				}
+
+				CString	sName (p);
+				p				+= _tcslen (p) + 1;
+
+				g_oEnglishNames[nIndex]	= sName;
+
+				CString	sLower (sName);
+				sLower.MakeLower ();
+				DWORD	nExisting	= 0;
+				if (!g_oEnglishIndexes.Lookup (sLower, nExisting))
+				{
+					g_oEnglishIndexes[sLower]	= nIndex;
+				}
+			}
+		}
+		if (pBuffer)
+		{
+			HeapFree (GetProcessHeap (), 0, pBuffer);
+		}
+	}
+
+	RegCloseKey (hKey);
+}
+
+// The English name of a (possibly localized) object or counter name. Returns the name unchanged if there is no translation.
+static CString LocalNameToEnglish (const CString& sName)
+{
+	LoadEnglishNames ();
+
+	DWORD	nIndex	= 0;
+	CString	sEnglish;
+	if (PdhLookupPerfIndexByName (NULL, sName, &nIndex) == ERROR_SUCCESS && g_oEnglishNames.Lookup (nIndex, sEnglish))
+	{
+		return sEnglish;
+	}
+
+	return sName;
+}
+
+// The localized name of an English object or counter name. Returns the name unchanged if there is no translation.
+static CString EnglishNameToLocal (const CString& sName)
+{
+	LoadEnglishNames ();
+
+	CString	sLower (sName);
+	sLower.MakeLower ();
+
+	DWORD	nIndex	= 0;
+	if (!g_oEnglishIndexes.Lookup (sLower, nIndex))
+	{
+		return sName;
+	}
+
+	TCHAR	sBuffer[256]	= { 0 };
+	DWORD	nBuffer			= 256;
+	if (PdhLookupPerfNameByIndex (NULL, nIndex, sBuffer, &nBuffer) == ERROR_SUCCESS)
+	{
+		return CString (sBuffer);
+	}
+
+	return sName;
+}
+
+// Is this a valid counter path when interpreted as English?
+static BOOL IsValidEnglishPath (const CString& sPath)
+{
+	PDH_HQUERY		hQuery		= NULL;
+	PDH_HCOUNTER	hCounter	= NULL;
+	BOOL			bValid		= FALSE;
+
+	if (PdhOpenQuery (NULL, 0, &hQuery) == ERROR_SUCCESS)
+	{
+		bValid	= (PdhAddEnglishCounter (hQuery, sPath, 0, &hCounter) == ERROR_SUCCESS);
+		PdhCloseQuery (hQuery);
+	}
+
+	return bValid;
+}
+
+// Split a counter path like \Object(Instance)\Counter or \\Machine\Object(Instance)\Counter into its parts
+BOOL ParsePerfPath (const CString& sPath, CString& sMachine, CString& sObject, CString& sInstance, CString& sCounter)
+{
+	CStringArray	asElements;
+	CString			sObjectAndInstance;
+
+	sMachine.Empty ();
+	sObject.Empty ();
+	sInstance.Empty ();
+	sCounter.Empty ();
+
+	if (!Split (TEXT ("\\"), sPath, &asElements))
+	{
+		return FALSE;
+	}
+	if (asElements.GetSize () == 3)
+	{
+		sObjectAndInstance	= asElements.GetAt (1);
+		sCounter			= asElements.GetAt (2);
+	}
+	else if (asElements.GetSize () == 5)
+	{
+		sMachine			= asElements.GetAt (2);
+		sObjectAndInstance	= asElements.GetAt (3);
+		sCounter			= asElements.GetAt (4);
+	}
+	else
+	{
+		return FALSE;
+	}
+
+	// Separate object from instance, e.g.: PhysicalDisk(_Total)
+	int	nIndex	= sObjectAndInstance.Find ('(');
+	if (nIndex != -1)
+	{
+		sObject		= sObjectAndInstance.Left (nIndex);
+		sInstance	= sObjectAndInstance.Mid (nIndex + 1, sObjectAndInstance.GetLength () - nIndex - 2);
+	}
+	else
+	{
+		sObject		= sObjectAndInstance;
+	}
+
+	return TRUE;
+}
+
+CString MakePerfPath (const CString& sMachine, const CString& sObject, const CString& sInstance, const CString& sCounter)
+{
+	CString	sPath;
+
+	if (!sMachine.IsEmpty ())
+	{
+		sPath	= TEXT ("\\\\") + sMachine;
+	}
+	sPath	+= TEXT ("\\") + sObject;
+	if (!sInstance.IsEmpty ())
+	{
+		sPath	+= TEXT ("(") + sInstance + TEXT (")");
+	}
+	sPath	+= TEXT ("\\") + sCounter;
+
+	return sPath;
+}
+
+// A path in the system language to an English path. Returns the path unchanged if no valid English path results.
+CString LocalPathToEnglish (const CString& sPath)
+{
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
+	{
+		return sPath;
+	}
+
+	CString	sEnglish	= MakePerfPath (sMachine, LocalNameToEnglish (sObject), sInstance, LocalNameToEnglish (sCounter));
+
+	return IsValidEnglishPath (sEnglish) ? sEnglish : sPath;
+}
+
+// An English path to a path in the system language. Returns the path unchanged if it is already valid or no valid path results.
+CString EnglishPathToLocal (const CString& sPath)
+{
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	if (PdhValidatePath (sPath) == ERROR_SUCCESS)
+	{
+		return sPath;
+	}
+	if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
+	{
+		return sPath;
+	}
+
+	CString	sLocal	= MakePerfPath (sMachine, EnglishNameToLocal (sObject), sInstance, EnglishNameToLocal (sCounter));
+
+	return (PdhValidatePath (sLocal) == ERROR_SUCCESS) ? sLocal : sPath;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+//
+//      Autostart: a per-user Run entry for this copy of the executable
+//      The value name contains the full path, so every copy gets its own entry
+//
+//////////////////////////////////////////////////////////////////////
+
+#define AUTOSTART_REG_KEY	TEXT ("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+
+static CString GetAutoStartEntry (CString& sCommand)
+{
+	TCHAR	sPath[MAX_PATH]	= { 0 };
+
+	GetModuleFileName (NULL, sPath, MAX_PATH);
+	sCommand	= TEXT ("\"") + CString (sPath) + TEXT ("\"");
+
+	return CString (TEXT ("DiskLED - ")) + sPath;
+}
+
+BOOL IsAutoStartEnabled ()
+{
+	CString		sCommand;
+	CString		sName	= GetAutoStartEntry (sCommand);
+	HKEY		hKey	= NULL;
+	BOOL		bResult	= FALSE;
+
+	if (RegOpenKeyEx (HKEY_CURRENT_USER, AUTOSTART_REG_KEY, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+	{
+		TCHAR	sData[MAX_PATH + 3]	= { 0 };
+		DWORD	nSize				= sizeof (sData) - sizeof (TCHAR);
+		DWORD	nType				= 0;
+
+		if (RegQueryValueEx (hKey, sName, NULL, &nType, (LPBYTE) sData, &nSize) == ERROR_SUCCESS && nType == REG_SZ)
+		{
+			bResult	= (sCommand.CompareNoCase (sData) == 0);
+		}
+		RegCloseKey (hKey);
+	}
+
+	return bResult;
+}
+
+DWORD SetAutoStart (BOOL bEnable)
+{
+	CString		sCommand;
+	CString		sName	= GetAutoStartEntry (sCommand);
+	HKEY		hKey	= NULL;
+	DWORD		nError	= ERROR_SUCCESS;
+
+	if (bEnable)
+	{
+		nError	= RegCreateKeyEx (HKEY_CURRENT_USER, AUTOSTART_REG_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &hKey, NULL);
+		if (nError == ERROR_SUCCESS)
+		{
+			nError	= RegSetValueEx (hKey, sName, 0, REG_SZ, (const BYTE*) (LPCTSTR) sCommand, (sCommand.GetLength () + 1) * sizeof (TCHAR));
+			RegCloseKey (hKey);
+		}
+	}
+	else
+	{
+		nError	= RegOpenKeyEx (HKEY_CURRENT_USER, AUTOSTART_REG_KEY, 0, KEY_SET_VALUE, &hKey);
+		if (nError == ERROR_SUCCESS)
+		{
+			nError	= RegDeleteValue (hKey, sName);
+			RegCloseKey (hKey);
+		}
+
+		// Nothing to remove is fine
+		if (nError == ERROR_FILE_NOT_FOUND)
+		{
+			nError	= ERROR_SUCCESS;
+		}
+	}
+
+	return nError;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+////	Select the item in a combo box list that contains a given string
 //
 //////////////////////////////////////////////////////////////////////
 

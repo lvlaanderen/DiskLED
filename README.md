@@ -6,3 +6,88 @@ DiskLED comes with a graphical configuration dialog that lets you choose from al
 ## Documentation and Release Builds
 
 The documentation and compiled release builds can be found [here](https://helgeklein.com/free-tools/diskled/).
+
+## Settings
+
+Everything below can be set in the config dialog (double-click the tray icon). The settings are stored in `DiskLED.ini` next to the executable when **Update the INI file when applying settings** is ticked. The dialog shows a live preview of the icon, animated with a test signal.
+
+### Icon types
+
+`LEDType` in the INI:
+
+- `Flicker`: the LED. A rectangle in the low colour whose brightness follows the load.
+- `ColoredBar`: a Task Manager style bar with a dotted background.
+- `CleanBar`: a plain bar rising from the bottom.
+- `VUMeter`: stacked segments, lit up to the value and coloured by height. Unlit segments are dimmed.
+- `Graph`: the last 16 values as bars, with a dim line at 50%.
+- `Number`: the current value as text with a one-letter unit below it (B/K/M/G for bytes, b/k/m/g for bits, % for percent).
+
+### Counter settings
+
+These are stored per counter, in `[Performance Counter 1]` and `[Performance Counter 2]`:
+
+- `Path`: the counter path. Written in English, so the INI file works on any Windows language. Paths in the system language from older versions still work.
+- `100% Utilization`: the counter value that corresponds to 100%.
+- `ValueFormat`: how values are shown in the tooltip and in the number icon: `Percent` (default), `Number`, `Bytes` (counter is bytes/s, shown as B/s, KB/s, MB/s), `Bits` (bytes/s shown as bit/s, kbit/s, Mbit/s) or `MBytes` (counter is in megabytes, shown as MB/GB/TB; with a fixed scale the tooltip also shows the total).
+- `ScaleMode`: what corresponds to the full icon. `Fixed` (default): the 100% value. `Peak`: the highest of the last 16 values. `Decay`: a peak that falls by half every 30 seconds. With `Peak` and `Decay` the `100% Utilization` value is the minimum scale. (Older versions used `AutoScale=1`, which is read as `Peak`.)
+- `Invert`: `1` shows the 100% value minus the counter value, for example memory used from `\Memory\Available MBytes`.
+- `AlertAbove` and `AlertSeconds`: show a notification when the value stays above this percentage of the `100% Utilization` value for this many seconds. `0` turns the warning off. It is shown once per period above the threshold.
+
+### Settings for all counters
+
+In `[Performance Counter 1]`:
+
+- `LEDType`: the icon type, see above.
+- `UpdateInterval`: milliseconds between updates. Use about 1000 for the graph.
+- `SecondCounter`: `1` shows a second counter. The bar types show the two counters side by side in one icon and the graph one above the other. The number is too small to share, so it gets two tray icons, one per counter, each with its own unit. The tooltip lists both counters.
+- `ColorLow`, `ColorMid`, `ColorHigh`: the colours as `RRGGBB` hex, for example `00DC00`.
+- `ThresholdMid`, `ThresholdHigh`: the percentage of the scale where the mid and the high colour start (defaults 50 and 75). The LED only uses the low colour.
+
+### Start with Windows
+
+The **Start with Windows** checkbox adds or removes a per-user entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` for this copy of the executable (no admin rights needed). Each copy, in its own folder with its own INI, gets its own entry. If you move the executable, untick and re-tick the option from the new location.
+
+## Examples
+
+Internet download and upload speed, one icon with two counters:
+
+```ini
+[Performance Counter 1]
+LEDType=VUMeter
+UpdateInterval=1000
+SecondCounter=1
+Path=\Network Adapter(<your adapter>)\Bytes Received/sec
+100% Utilization=43750000
+ValueFormat=Bits
+ScaleMode=Decay
+
+[Performance Counter 2]
+Path=\Network Adapter(<your adapter>)\Bytes Sent/sec
+100% Utilization=12500000
+ValueFormat=Bits
+ScaleMode=Decay
+```
+
+`100% Utilization` is in bytes per second, so for a 350 Mbit/s line it is 350000000 / 8 = 43750000.
+
+Memory used, with a warning above 90% for one minute:
+
+```ini
+[Performance Counter 1]
+LEDType=Number
+UpdateInterval=1000
+Path=\Memory\Available MBytes
+100% Utilization=65536
+ValueFormat=MBytes
+Invert=1
+AlertAbove=90
+AlertSeconds=60
+```
+
+## Building
+
+Open `DiskLED.sln` in Visual Studio 2022 with the **Desktop development with C++** workload and the **C++ MFC** component, or build from a developer command prompt:
+
+```
+msbuild DiskLED.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+```

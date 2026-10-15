@@ -95,9 +95,9 @@ FONT 10, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,192,114,50,14
     ICON            IDI_ICON5,IDC_ABOUT_ICON1,12,12,18,16
-    CONTROL         "DiskLED by Helge Klein (<a href=""http://blogs.sepago.de/helge/"" target=""_blank"">http://blogs.sepago.de/helge/</a>)",IDC_SYSLINK_URL1,
+    CONTROL         "DiskLED by Helge Klein (<a href=""https://helgeklein.com/"" target=""_blank"">https://helgeklein.com/</a>)",IDC_SYSLINK_URL1,
                     "SysLink",WS_TABSTOP,48,18,192,12
-    CONTROL         "<a href=""http://blogs.sepago.de/tools/category/diskled/"" target=""_blank"">http://blogs.sepago.de/tools/category/diskled/</a>",IDC_SYSLINK_URL2,
+    CONTROL         "<a href=""https://helgeklein.com/free-tools/diskled/"" target=""_blank"">https://helgeklein.com/free-tools/diskled/</a>",IDC_SYSLINK_URL2,
                     "SysLink",WS_TABSTOP,48,48,192,12
     LTEXT           "Homepage of DiskLED:",IDC_TEXT2,48,36,104,8
     ICON            IDI_ICON4,IDC_ABOUT_ICON2,12,30,18,16
@@ -107,39 +107,63 @@ BEGIN
     LTEXT           "DiskLED is a flexible system activity indicator applet for the system tray. It can display data from any performance counter. By default, it displays disk activity by flickering, just as the physical hard disk LED in many computer cases.",IDC_TEXT3,48,66,192,42,0,WS_EX_TRANSPARENT
 END
 
-IDD_DIALOG_CONFIG DIALOGEX 0, 0, 345, 388
+IDD_DIALOG_CONFIG DIALOGEX 0, 0, 345, 418
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_CAPTION | WS_SYSMENU
 CAPTION "DiskLED Configuration"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Select data source:",IDC_STATIC,7,7,328,212
-    LTEXT           "&Object:",IDC_COUNTERPATH_TEXT2,17,21,25,8
-    COMBOBOX        IDC_PERF_OBJECTS,17,33,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Counter:",IDC_COUNTERPATH_TEXT3,17,53,30,8
-    COMBOBOX        IDC_PERF_COUNTERS,17,65,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Instance:",IDC_COUNTERPATH_TEXT4,17,85,32,8
-    COMBOBOX        IDC_PERF_INSTANCES,17,97,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Description:",IDC_COUNTERPATH_TEXT5,17,117,39,8
-    EDITTEXT        IDC_PERF_DESCRIPTION,17,130,305,59,ES_MULTILINE | ES_READONLY | WS_VSCROLL
-    PUSHBUTTON      "Build path from &selection",IDC_USE_SELECTED_DATA_SOURCE,17,195,112,14
-    LTEXT           "&Performance counter path used as data source:",IDC_COUNTERPATH_TEXT,7,229,154,8
-    EDITTEXT        IDC_COUNTERPATH_EDIT,7,239,226,12,ES_AUTOHSCROLL | ES_READONLY
-    LTEXT           "In order to be able to calculate system activity, DiskLED needs to know which value from the performance counter path shown above is equivalent to 100% utilization.",IDC_100PERCENT_TEXT,7,258,226,26
-    LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,287,55,8
-    EDITTEXT        IDC_100PERCENT_EDIT,75,285,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "How often should DiskLED get new performance data and update its icon? Enter a value in milliseconds for the interval between consecutive updates.",IDC_100PERCENT_TEXT3,7,301,226,26
-    LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,330,62,8
-    EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,328,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "ms",IDC_UPDATEFREQUENCY_TEXT2,107,330,10,8
-    GROUPBOX        "Icon type:",IDC_GROUP_LEDTYPE,257,229,78,80
-    CONTROL         "&LED",IDC_RADIO_LEDTYPE1,"Button",BS_AUTORADIOBUTTON | BS_ICON | BS_CENTER | BS_VCENTER | WS_GROUP | WS_TABSTOP,275,238,54,32
-    CONTROL         "&Bar",IDC_RADIO_LEDTYPE2,"Button",BS_AUTORADIOBUTTON | BS_ICON | BS_CENTER | BS_VCENTER | WS_TABSTOP,275,270,54,32
+    LTEXT           "Settings for:",IDC_STATIC,7,9,44,8
+    COMBOBOX        IDC_COMBO_COUNTERSEL,53,7,60,40,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Use a &second counter",IDC_CHECK_COUNTER2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,9,110,10
+    GROUPBOX        "Select data source:",IDC_STATIC,7,24,328,180
+    LTEXT           "&Object:",IDC_COUNTERPATH_TEXT2,17,37,25,8
+    COMBOBOX        IDC_PERF_OBJECTS,17,48,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Counter:",IDC_COUNTERPATH_TEXT3,17,66,30,8
+    COMBOBOX        IDC_PERF_COUNTERS,17,77,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Instance:",IDC_COUNTERPATH_TEXT4,17,95,32,8
+    COMBOBOX        IDC_PERF_INSTANCES,17,106,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Description:",IDC_COUNTERPATH_TEXT5,17,124,39,8
+    EDITTEXT        IDC_PERF_DESCRIPTION,17,135,305,38,ES_MULTILINE | ES_READONLY | WS_VSCROLL
+    PUSHBUTTON      "Build path from &selection",IDC_USE_SELECTED_DATA_SOURCE,17,181,112,14
+    LTEXT           "&Performance counter path used as data source:",IDC_COUNTERPATH_TEXT,7,211,154,8
+    EDITTEXT        IDC_COUNTERPATH_EDIT,7,221,226,12,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "In order to be able to calculate system activity, DiskLED needs to know which value from the performance counter path shown above is equivalent to 100% utilization.",IDC_100PERCENT_TEXT,7,240,226,26
+    LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,269,55,8
+    EDITTEXT        IDC_100PERCENT_EDIT,75,267,50,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "How often should DiskLED get new performance data and update its icon? Enter a value in milliseconds for the interval between consecutive updates.",IDC_100PERCENT_TEXT3,7,283,226,26
+    LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,312,62,8
+    EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,310,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "ms",IDC_UPDATEFREQUENCY_TEXT2,107,312,10,8
+    GROUPBOX        "Icon type:",IDC_GROUP_LEDTYPE,257,211,78,34
+    COMBOBOX        IDC_COMBO_ICONTYPE,264,225,64,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
+    GROUPBOX        "Preview:",IDC_STATIC,257,248,78,76
+    CONTROL         "",IDC_PREVIEW,"Static",SS_OWNERDRAW,262,258,68,62
+    LTEXT           "Value &format:",IDC_VALUEFORMAT_TEXT,7,334,50,8,WS_GROUP
+    COMBOBOX        IDC_COMBO_VALUEFORMAT,60,332,60,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Scale:",IDC_STATIC,126,334,24,8
+    COMBOBOX        IDC_COMBO_SCALEMODE,152,332,50,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "&Invert",IDC_CHECK_INVERT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,208,333,48,10
+    LTEXT           "&Warn above",IDC_STATIC,7,350,40,8
+    EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "% of the 100% value, for",IDC_STATIC,75,350,84,8
+    EDITTEXT        IDC_EDIT_ALERT_SECONDS,160,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "s  (0% = no warning)",IDC_STATIC,185,350,100,8
+    LTEXT           "Colours:",IDC_STATIC,7,367,34,8
+    CONTROL         "",IDC_COLOR_LOW,"Button",BS_OWNERDRAW | WS_TABSTOP,45,364,24,13
+    CONTROL         "",IDC_COLOR_MID,"Button",BS_OWNERDRAW | WS_TABSTOP,73,364,24,13
+    CONTROL         "",IDC_COLOR_HIGH,"Button",BS_OWNERDRAW | WS_TABSTOP,101,364,24,13
+    LTEXT           "Mid from",IDC_STATIC,135,367,32,8
+    EDITTEXT        IDC_EDIT_THRESHOLD_MID,168,364,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "%, high from",IDC_STATIC,192,367,48,8
+    EDITTEXT        IDC_EDIT_THRESHOLD_HIGH,242,364,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "%",IDC_STATIC,266,367,8,8
+    CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,382,120,10
     CONTROL         "&Update the INI file when applying settings",IDC_UPDATE_INI,
-                    "Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,184,350,151,10
-    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,367,65,14
-    DEFPUSHBUTTON   "OK",IDOK,170,367,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,228,367,50,14
-    PUSHBUTTON      "&Apply",IDC_APPLY,285,367,50,14
+                    "Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,184,382,151,10
+    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,396,65,14
+    DEFPUSHBUTTON   "OK",IDOK,170,396,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,228,396,50,14
+    PUSHBUTTON      "&Apply",IDC_APPLY,285,396,50,14
 END
 
 
@@ -171,7 +195,7 @@ BEGIN
         VERTGUIDE, 233
         VERTGUIDE, 322
         TOPMARGIN, 7
-        BOTTOMMARGIN, 381
+        BOTTOMMARGIN, 411
         HORZGUIDE, 25
         HORZGUIDE, 37
         HORZGUIDE, 57
@@ -222,6 +246,17 @@ BEGIN
     END
 END
 
+IDR_POPUP_MENU2 MENU 
+BEGIN
+    POPUP "POPUP_MENU"
+    BEGIN
+        MENUITEM "&Configure...",               ID_POPUP_CONFIGURE
+        MENUITEM "&About DiskLED...",           ID_POPUP_ABOUT
+        MENUITEM SEPARATOR
+        MENUITEM "&Exit",                       ID_POPUP_EXIT
+    END
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -269,10 +304,18 @@ END
 
 STRINGTABLE 
 BEGIN
-    IDS_TOOLTIP_LEDTYPE1    "A flickering LED icon, similar to a real hard disk LED."
-    IDS_TOOLTIP_LEDTYPE2    "A percentage bar similar to what Task Manager uses."
+    IDS_TOOLTIP_ICONTYPE    "How the load is shown in the tray: LED (brightness), Bar (Task Manager style), Clean bar, VU meter (segments), Graph (recent history) or Number."
+    IDS_TOOLTIP_INVERT      "Show the 100% value minus the counter value, e.g. memory used from a counter that reports memory available."
+    IDS_TOOLTIP_COLORS      "Low, mid and high colour. Click to change. Used by all icon types (the LED uses the low colour)."
+    IDS_TOOLTIP_THRESHOLDS  "Where the mid and the high colour start, in % of the scale (the 100% value, or the peak with the Peak and Decay scale)."
+    IDS_TOOLTIP_AUTOSTART   "Start this copy of DiskLED when you log on to Windows. Adds a Startup entry for the current user, no admin rights needed."
+    IDS_TOOLTIP_VALUEFORMAT "How to show the current value in the icon's tooltip. Use Bytes/s or Bits/s for counters measured in bytes per second, MBytes for counters measured in megabytes."
     IDS_TOOLTIP_UPDATE_FREQUENCY 
                             "How often to update the display (in milliseconds)"
+    IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). With Peak and Decay the 100% value is the minimum."
+    IDS_TOOLTIP_COUNTERSEL  "Which counter the settings below belong to. With a second counter, each counter has its own data source, 100% value, format, scale and warning."
+    IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for graph and number."
+    IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the 100% value for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_UPDATE_INI  "Update the INI configuration file when applying settings?"
     IDS_TOOLTIP_DEFAULT_VALUES "Restore default values?"
     IDS_TOOLTIP_100PERCENT  "Which performance counter value corresponds to 100% utilization?"

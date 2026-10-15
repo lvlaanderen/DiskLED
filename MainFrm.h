@@ -1,51 +1,28 @@
 
 #include <pdh.h>
 #include <PDHMsg.h>
+#include "Settings.h"
+#include "IconRenderer.h"
 
 
 #pragma comment(lib, "pdh.lib")
 
-// LED type constants
-#define	LEDTYPE_FLICKER				1
-#define	LEDTYPE_FLICKER_TEXT		TEXT ("Flicker")
-#define	LEDTYPE_COLOREDBAR			2
-#define	LEDTYPE_COLOREDBAR_TEXT		TEXT ("ColoredBar")
-
 // The name of the program
 #define PROGRAM_NAME				TEXT ("DiskLED")
 
-// Default value for first LED's type
-#define DEFAULT_COUNTER_1_LEDTYPE	LEDTYPE_FLICKER
+// Minimum time between two tooltip updates
+#define	TOOLTIP_UPDATE_MS			500
 
-// Default value for the performance 1 counter path
-#define DEFAULT_COUNTER_1_PATH		TEXT ("\\PhysicalDisk(_Total)\\% Disk Time")
 
-// Default value for the performance 1 counter update interval
-#define DEFAULT_COUNTER_1_MS		30
-
-// Default value for the performance 1 counter 100% utilization
-#define DEFAULT_COUNTER_1_100PERCENT	100
-
-// How many different icons do we use for state?
-#define NUM_ICONS					5
-
-// Name of the INI (settings) file
-#define INI_SETTINGS_FILE			TEXT ("DiskLED.ini")
-
-// INI section name of first performance counter
-#define INI_COUNTER_1_SECTION		TEXT ("Performance Counter 1")
-
-// INI value name of first performance counter LED type
-#define INI_COUNTER_1_VALUE_LEDTYPE				TEXT("LEDType")
-
-// INI value name of first performance counter path
-#define INI_COUNTER_1_VALUE_PATH				TEXT("Path")
-
-// INI value name of first performance counter update frequency
-#define INI_COUNTER_1_VALUE_UPDATE_INTERVAL		TEXT("UpdateInterval")
-
-// INI value name of first performance counter maximum value
-#define INI_COUNTER_1_VALUE_100PERCENT			TEXT("100% Utilization")
+// Runtime state of one performance counter
+struct CounterRuntime
+{
+	PDH_HCOUNTER	hCounter;
+	double			dDecayPeak;			// Decaying peak of the values
+	BOOL			bAbove;				// The value is above the alert threshold
+	DWORD			nAboveSince;		// Tick count when it went above
+	BOOL			bAlerted;			// The alert was shown for this period above the threshold
+};
 
 
 class CMainFrame : public CFrameWnd
@@ -53,6 +30,7 @@ class CMainFrame : public CFrameWnd
 // Operations
 public:
 	CMainFrame();
+	virtual ~CMainFrame();
 
 	DECLARE_DYNCREATE(CMainFrame)
 
@@ -66,12 +44,8 @@ protected:
 // Implementation
 public:
 	// Member functions
-	DWORD	Initialize (CString sCounterPath = TEXT (""), DWORD nLEDType = 0, DWORD nTimerInterval = 0, double dCounter_100Percent = 0.0);
-	void	GetLEDDefaults (CString& sCounterPath, int& nLEDType, DWORD& nTimerInterval, double& dCounter_100Percent);
-	int		GetLEDType ();
-	DWORD	GetUpdateFrequency ();
-	double	Get100PercentUtilization ();
-	void	GetCounterPath (CString& sCounterPath);
+	void	GetSettings (DiskLEDSettings& oSettings);
+	DWORD	ApplySettings (const DiskLEDSettings& oSettings);
 	void	GetINIFile (CString& sINIFile);
 	void	LogError (CString sCaller, CString sFailedComponent, DWORD nError, CString sHelpMessage = TEXT(""));
 	
@@ -79,29 +53,37 @@ private:
 
 	// Member variables
 	CSystemTray				m_TrayIcon;
+	CSystemTray*			m_pTrayIcon2;			// Second tray icon, only with separate icons for two counters
 	CMenu					m_Menu;					// popup menu
 	UINT_PTR				m_TimerID;				// Timer ID
-	UINT					m_nCurrentIcon;
 	PDH_HQUERY				m_hQuery;
-	PDH_HCOUNTER			m_hCounter;
-	PDH_FMT_COUNTERVALUE	m_oCounterVal;
 	CString					m_sInstallationDirectory;
 	CString					m_sExecutablePath;
 	CString					m_sINIFile;
 
-	DWORD					m_nLED1Type;					// Which type of LED to display
-	DWORD					m_nTimerIntervalMS;				// Timer interval in ms
-	CString					m_sCounter1Path;				// Path of first performance counter
-	double					m_dCounter1_100Percent;			// 100% mark for first performance counter
+	DiskLEDSettings			m_oSettings;
+	IconStyle				m_oStyle;
+	int						m_nCounters;					// 1 or 2
+	CounterRuntime			m_aRuntime[2];
+	IconCounter				m_aIcon[2];
+	DWORD					m_nIconKey;						// Identifies the icon currently shown (see ICONKEY_*)
+	DWORD					m_nLastTooltipTick;				// Tick count of the last tooltip update
 
 	// Member functions
 	void					ShowConfigurationDialog ();
 	void					ShowAboutDialog ();
 	void					Shutdown ();
+	DWORD					Initialize ();
 	DWORD					StartTimer ();
 	DWORD					InitPDH ();
 	DWORD					ClosePDH ();
 	DWORD					ReadSettings ();
+	CString					GetCounterLabel (int nCounter);
+	CString					GetTooltipText ();
+	CString					GetCounterTooltip (int nCounter);
+	void					UpdateTrayIcons ();
+	void					UpdateTooltips ();
+	void					CheckAlert (int nCounter);
 
 
 

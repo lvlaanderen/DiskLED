@@ -3,6 +3,12 @@ DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CSt
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const int &nValue);
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const double &nValue);
 BOOL	IsFileExistent (CString sPath);
+BOOL	IsAutoStartEnabled ();
+DWORD	SetAutoStart (BOOL bEnable);
+BOOL	ParsePerfPath (const CString& sPath, CString& sMachine, CString& sObject, CString& sInstance, CString& sCounter);
+CString	MakePerfPath (const CString& sMachine, const CString& sObject, const CString& sInstance, const CString& sCounter);
+CString	LocalPathToEnglish (const CString& sPath);
+CString	EnglishPathToLocal (const CString& sPath);
 DWORD	GetFileAttributesAPIWrapper (CString sPath, DWORD* nAttributes);
 BOOL	Split (CString sDelimiter, CString sInput, CStringArray* asOutput);
 void	SelectComboBoxString (CComboBox& oBox, CString& sItem);
