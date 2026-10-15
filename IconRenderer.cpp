@@ -42,7 +42,9 @@ BOOL UsesSeparateIcons (DWORD nIconType, int nCounters)
 // Value in % of the scale
 static double GetNormalized (const IconCounter& oCounter)
 {
-	return (oCounter.dScale > 0) ? oCounter.dValue * 100.0 / oCounter.dScale : 0;
+	double	dNormalized	= (oCounter.dScale > 0) ? oCounter.dValue * 100.0 / oCounter.dScale : 0;
+
+	return _finite (dNormalized) ? dNormalized : 0;
 }
 
 // LED brightness step (0-4) for a value in % of the scale
@@ -71,18 +73,18 @@ static int GetLEDLevel (double dNormalized)
 // Height in pixels of a fill for a value in % of the scale (at least 1 pixel for any non-zero value)
 static int GetFillPixels (double dNormalized, int nHeight)
 {
+	if (!(dNormalized > 0.0))
+	{
+		return 0;
+	}
+	if (dNormalized >= 100.0)
+	{
+		return nHeight;
+	}
+
 	int	nFill	= (int) (dNormalized / 100.0 * nHeight + 0.5);
 
-	if (nFill == 0 && dNormalized > 0)
-	{
-		nFill	= 1;
-	}
-	if (nFill > nHeight)
-	{
-		nFill	= nHeight;
-	}
-
-	return nFill;
+	return (nFill < 1) ? 1 : (nFill > nHeight) ? nHeight : nFill;
 }
 
 // Width of the white edge of the bar icon
@@ -100,10 +102,56 @@ static int GetVUPitch (int nHeight)
 // Number of lit VU meter segments for a value in % of the scale
 static int GetVULit (double dNormalized, int nHeight)
 {
-	int	nSegments	= nHeight / GetVUPitch (nHeight);
-	int	nLit		= (int) ceil (dNormalized * nSegments / 100.0);
+	int		nSegments	= nHeight / GetVUPitch (nHeight);
 
-	return (nLit < 0) ? 0 : (nLit > nSegments) ? nSegments : nLit;
+	if (!(dNormalized > 0.0))
+	{
+		return 0;
+	}
+
+	double	dLit		= ceil (dNormalized * nSegments / 100.0);
+
+	return (dLit > nSegments) ? nSegments : (int) dLit;
+}
+
+// Height in pixels of the graph bar for history entry i, and its value in 0..1 of the scale
+static int GetGraphBarHeight (const IconCounter& oCounter, int i, int nHeight, double& dFraction)
+{
+	dFraction	= (oCounter.dScale > 0) ? oCounter.adHistory[i] / oCounter.dScale : 0;
+	if (!(dFraction > 0.0))
+	{
+		dFraction	= 0;
+	}
+	if (dFraction > 1.0)
+	{
+		dFraction	= 1.0;
+	}
+
+	int		nBarHeight	= (int) (dFraction * nHeight + 0.5);
+	if (nBarHeight == 0 && oCounter.adHistory[i] > 0)
+	{
+		nBarHeight	= 1;
+	}
+
+	return nBarHeight;
+}
+
+static DWORD HashStep (DWORD nHash, DWORD nValue)
+{
+	return (nHash ^ nValue) * 16777619u;
+}
+
+// The number of the number icon: one decimal for small numbers, none from 10 up (rounding to 10 must not show "10.0")
+static CString GetNumberText (const IconCounter& oCounter, CString& sIconUnit)
+{
+	CString	sUnit;
+	CString	sNumber;
+	double	dNumber	= 0;
+
+	GetValueParts (oCounter.nValueFormat, oCounter.dValue, oCounter.dScale, dNumber, sUnit, sIconUnit);
+	sNumber.Format ((dNumber < 9.95) ? TEXT ("%.1f") : TEXT ("%.0f"), dNumber);
+
+	return sNumber;
 }
 
 static COLORREF ScaleColor (COLORREF nColor, double dFactor)
@@ -251,7 +299,7 @@ static void GetCounterRects (const IconStyle& oStyle, int nCounters, int nSize, 
 DWORD GetIconKey (const IconStyle& oStyle, const IconCounter* aCounters, int nCounters, int nSize)
 {
 	CRect	aRects[2];
-	DWORD	nKey	= 0;
+	DWORD	nKey	= 2166136261u;
 
 	if (nCounters > 2)
 	{
@@ -259,35 +307,58 @@ DWORD GetIconKey (const IconStyle& oStyle, const IconCounter* aCounters, int nCo
 	}
 	GetCounterRects (oStyle, nCounters, nSize, aRects);
 
+	// The size is part of the key: the same values look different at another size
+	nKey	= HashStep (nKey, nSize);
+
 	for (int i = 0; i < nCounters; i++)
 	{
 		double	dNormalized	= GetNormalized (aCounters[i]);
-		DWORD	nCounterKey	= ICONKEY_ALWAYS;
 
 		switch (oStyle.nType)
 		{
-		case LEDTYPE_FLICKER:
-			nCounterKey	= GetLEDLevel (dNormalized);
-			break;
 		case LEDTYPE_COLOREDBAR:
-			nCounterKey	= GetFillPixels (dNormalized, aRects[i].Height () - GetBarBorder (aRects[i])) * 4 + GetColorIndex (oStyle, dNormalized);
+			nKey	= HashStep (nKey, GetFillPixels (dNormalized, aRects[i].Height () - GetBarBorder (aRects[i])) * 4 + GetColorIndex (oStyle, dNormalized));
 			break;
 		case LEDTYPE_CLEANBAR:
-			nCounterKey	= GetFillPixels (dNormalized, aRects[i].Height ()) * 4 + GetColorIndex (oStyle, dNormalized);
+			nKey	= HashStep (nKey, GetFillPixels (dNormalized, aRects[i].Height ()) * 4 + GetColorIndex (oStyle, dNormalized));
 			break;
 		case LEDTYPE_VUMETER:
-			nCounterKey	= GetVULit (dNormalized, aRects[i].Height ());
+			nKey	= HashStep (nKey, GetVULit (dNormalized, aRects[i].Height ()));
+			break;
+		case LEDTYPE_GRAPH:
+			// What is drawn is the bar height in pixels and the colour of each sample
+			for (int j = 0; j < HISTORY_SIZE; j++)
+			{
+				double	dFraction	= 0;
+				int		nBarHeight	= GetGraphBarHeight (aCounters[i], j, aRects[i].Height (), dFraction);
+				nKey	= HashStep (nKey, nBarHeight * 4 + GetColorIndex (oStyle, dFraction * 100.0));
+			}
+			break;
+		case LEDTYPE_NUMBER:
+			{
+				// What is drawn is the text and its colour
+				CString	sIconUnit;
+				CString	sNumber	= GetNumberText (aCounters[i], sIconUnit);
+
+				for (int j = 0; j < sNumber.GetLength (); j++)
+				{
+					nKey	= HashStep (nKey, sNumber[j]);
+				}
+				for (int j = 0; j < sIconUnit.GetLength (); j++)
+				{
+					nKey	= HashStep (nKey, sIconUnit[j]);
+				}
+				nKey	= HashStep (nKey, GetColorIndex (oStyle, dNormalized));
+			}
+			break;
+		default:
+			nKey	= HashStep (nKey, GetLEDLevel (dNormalized));
 			break;
 		}
-
-		if (nCounterKey == ICONKEY_ALWAYS)
-		{
-			return ICONKEY_ALWAYS;
-		}
-		nKey	= nKey * 1024 + nCounterKey;
 	}
 
-	return nKey;
+	// Keep clear of the reserved values
+	return (nKey >= ICONKEY_NONE) ? 1 : nKey;
 }
 
 
@@ -391,17 +462,8 @@ static void DrawGraph (CDC* pDC, const CRect& oRect, const IconStyle& oStyle, co
 {
 	for (int i = 0; i < HISTORY_SIZE; i++)
 	{
-		double	dFraction	= (oCounter.dScale > 0) ? oCounter.adHistory[i] / oCounter.dScale : 0;
-		if (dFraction > 1)
-		{
-			dFraction	= 1;
-		}
-
-		int		nHeight	= (int) (dFraction * oRect.Height () + 0.5);
-		if (nHeight == 0 && oCounter.adHistory[i] > 0)
-		{
-			nHeight	= 1;
-		}
+		double	dFraction	= 0;
+		int		nHeight		= GetGraphBarHeight (oCounter, i, oRect.Height (), dFraction);
 
 		int		nLeft	= oRect.left + i * oRect.Width () / HISTORY_SIZE;
 		int		nRight	= oRect.left + (i + 1) * oRect.Width () / HISTORY_SIZE;
@@ -420,17 +482,10 @@ static void DrawGraph (CDC* pDC, const CRect& oRect, const IconStyle& oStyle, co
 
 static void DrawNumber (CDC* pDC, const CRect& oRect, const IconStyle& oStyle, const IconCounter& oCounter)
 {
-	CString	sUnit;
 	CString	sIconUnit;
-	CString	sNumber;
-	double	dNumber	= 0;
+	CString	sNumber	= GetNumberText (oCounter, sIconUnit);
 
-	GetValueParts (oCounter.nValueFormat, oCounter.dValue, oCounter.dScale, dNumber, sUnit, sIconUnit);
-
-	// One decimal for small numbers, none from 10 up (rounding to 10 must not show "10.0")
-	sNumber.Format ((dNumber < 9.95) ? TEXT ("%.1f") : TEXT ("%.0f"), dNumber);
-
-	// The number gets the whole area if there is no unit or no room for it (a wide strip when two counters share the icon), otherwise the upper part
+	// The number gets the whole area if there is no unit or no room for it, otherwise the upper part
 	bool	bUnit			= !sIconUnit.IsEmpty () && oRect.Height () >= 12 && oRect.Height () >= oRect.Width ();
 	int		nNumberHeight	= bUnit ? oRect.Height () * 10 / 16 : oRect.Height ();
 	int		nUnitHeight		= oRect.Height () - nNumberHeight;

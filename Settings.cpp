@@ -4,6 +4,8 @@
 #include "stdafx.h"
 #include "Settings.h"
 #include "Helpers.h"
+#include <float.h>
+#include <math.h>
 
 
 struct NameValue
@@ -75,6 +77,13 @@ static BOOL ParseColor (const CString& sColor, COLORREF& nColor)
 	{
 		return FALSE;
 	}
+	for (int i = 0; i < 6; i++)
+	{
+		if (!_istxdigit (sColor[i]))
+		{
+			return FALSE;
+		}
+	}
 
 	TCHAR*			pEnd	= NULL;
 	unsigned long	nRGB	= _tcstoul (sColor, &pEnd, 16);
@@ -144,9 +153,18 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 	{
 		oSettings.nIconType	= DEFAULT_ICONTYPE;
 	}
-	if (oSettings.nUpdateInterval == 0)
+	if ((int) oSettings.nUpdateInterval <= 0)
 	{
+		// 0 and negative numbers (read as huge unsigned values)
 		oSettings.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
+	}
+	else if (oSettings.nUpdateInterval < MIN_UPDATE_INTERVAL_MS)
+	{
+		oSettings.nUpdateInterval	= MIN_UPDATE_INTERVAL_MS;
+	}
+	else if (oSettings.nUpdateInterval > MAX_UPDATE_INTERVAL_MS)
+	{
+		oSettings.nUpdateInterval	= MAX_UPDATE_INTERVAL_MS;
 	}
 
 	if (oSettings.nThresholdMid < 1 || oSettings.nThresholdMid > 100)
@@ -166,7 +184,7 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 		{
 			oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
 		}
-		if (oCounter.d100Percent <= 0.0)
+		if (!(oCounter.d100Percent > 0.0) || !_finite (oCounter.d100Percent) || oCounter.d100Percent > MAX_100PERCENT)
 		{
 			oCounter.d100Percent	= DEFAULT_100PERCENT;
 		}
@@ -182,9 +200,17 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 		{
 			oCounter.nAlertPercent	= 0;
 		}
+		if (oCounter.nAlertPercent > MAX_ALERT_PERCENT)
+		{
+			oCounter.nAlertPercent	= MAX_ALERT_PERCENT;
+		}
 		if (oCounter.nAlertSeconds < 0)
 		{
 			oCounter.nAlertSeconds	= 0;
+		}
+		if (oCounter.nAlertSeconds > MAX_ALERT_SECONDS)
+		{
+			oCounter.nAlertSeconds	= MAX_ALERT_SECONDS;
 		}
 	}
 
@@ -372,10 +398,17 @@ DWORD SaveSettings (const CString& sINIFile, const DiskLEDSettings& oSettings)
 		nError	= SaveCounterSettings (sINIFile, INI_COUNTER_1_SECTION, oSettings.aCounters[0]);
 	}
 
-	// The second counter is only stored once it has a path
-	if (nError == ERROR_SUCCESS && !oSettings.aCounters[1].sPath.IsEmpty ())
+	// The second counter is only stored once it has a path. Without one, remove an old section, or it would come back at the next start.
+	if (nError == ERROR_SUCCESS)
 	{
-		nError	= SaveCounterSettings (sINIFile, INI_COUNTER_2_SECTION, oSettings.aCounters[1]);
+		if (!oSettings.aCounters[1].sPath.IsEmpty ())
+		{
+			nError	= SaveCounterSettings (sINIFile, INI_COUNTER_2_SECTION, oSettings.aCounters[1]);
+		}
+		else if (IsFileExistent (sINIFile) && !WritePrivateProfileString (INI_COUNTER_2_SECTION, NULL, NULL, sINIFile))
+		{
+			nError	= GetLastError ();
+		}
 	}
 
 	return nError;

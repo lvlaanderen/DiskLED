@@ -58,6 +58,7 @@ private:
 
 	// Control value variables
 	int			m_nCounterSel;			// Which counter the counter settings controls show: 0 or 1
+	BOOL		m_bSecondCounterSeeded;	// The second counter already got the first counter's settings as a starting point
 	int			m_nSecondCounter;
 	int			m_nLEDType;				// Icon type - 1
 	int			m_nValueFormat;			// Value format - 1

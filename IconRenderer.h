@@ -2,8 +2,7 @@
 
 #include "Settings.h"
 
-// Icon redraw keys: draw on every update / nothing drawn yet
-#define	ICONKEY_ALWAYS				0xFFFFFFFF
+// Icon redraw key: nothing drawn yet
 #define	ICONKEY_NONE				0xFFFFFFFE
 
 // How the icon looks
@@ -35,7 +34,7 @@ void	GetValueParts (DWORD nValueFormat, double dValue, double dScale, double& dN
 // Format a value for the tooltip. With bShowTotal, megabyte values also show the scale (e.g. "34.5 GB / 64.0 GB").
 CString	FormatValue (DWORD nValueFormat, double dValue, double dScale, BOOL bShowTotal);
 
-// Identifies what the icon looks like, so it only needs redrawing when this changes. ICONKEY_ALWAYS: redraw on every update.
+// Identifies what the icon looks like (a hash of what would be drawn), so it only needs redrawing when this changes
 DWORD	GetIconKey (const IconStyle& oStyle, const IconCounter* aCounters, int nCounters, int nSize);
 
 // Draw the icon into a DC (nSize x nSize pixels at the origin). One counter fills the icon, two counters share it.

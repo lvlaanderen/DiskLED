@@ -1,3 +1,4 @@
+#pragma once
 
 #include <pdh.h>
 #include <PDHMsg.h>
@@ -13,14 +14,23 @@
 // Minimum time between two tooltip updates
 #define	TOOLTIP_UPDATE_MS			500
 
+// Time between attempts to reconnect to the counters after an error
+#define	PDH_RETRY_MS				5000
+
+// A value that dips below the alert threshold for less than this long does not restart the alert timer
+#define	ALERT_DIP_MS				3000
+
 
 // Runtime state of one performance counter
 struct CounterRuntime
 {
 	PDH_HCOUNTER	hCounter;
 	double			dDecayPeak;			// Decaying peak of the values
+	DWORD			nLastTick;			// Tick count of the previous update, 0 = none yet
 	BOOL			bAbove;				// The value is above the alert threshold
 	DWORD			nAboveSince;		// Tick count when it went above
+	BOOL			bBelow;				// The value has dropped below the threshold while the alert period was running
+	DWORD			nBelowSince;		// Tick count when it dropped below
 	BOOL			bAlerted;			// The alert was shown for this period above the threshold
 };
 
@@ -54,7 +64,8 @@ private:
 	// Member variables
 	CSystemTray				m_TrayIcon;
 	CSystemTray*			m_pTrayIcon2;			// Second tray icon, only with separate icons for two counters
-	CMenu					m_Menu;					// popup menu
+	HICON					m_hIcon1;				// The icons currently set on the tray icons. The tray class keeps using them, so they are owned here.
+	HICON					m_hIcon2;
 	UINT_PTR				m_TimerID;				// Timer ID
 	PDH_HQUERY				m_hQuery;
 	CString					m_sInstallationDirectory;
@@ -66,16 +77,22 @@ private:
 	int						m_nCounters;					// 1 or 2
 	CounterRuntime			m_aRuntime[2];
 	IconCounter				m_aIcon[2];
-	DWORD					m_nIconKey;						// Identifies the icon currently shown (see ICONKEY_*)
+	DWORD					m_nIconKey;						// Identifies the icon currently shown (see GetIconKey)
+	DWORD					m_nIconKey2;					// The same for the second tray icon
 	DWORD					m_nLastTooltipTick;				// Tick count of the last tooltip update
+
+	BOOL					m_bPdhError;					// The counters could not be read, reconnecting every PDH_RETRY_MS
+	BOOL					m_bErrorShown;					// The error was already reported with a balloon
+	DWORD					m_nRetryTick;					// Tick count of the last (re)connection attempt
+	CString					m_sLastError;
 
 	// Member functions
 	void					ShowConfigurationDialog ();
 	void					ShowAboutDialog ();
 	void					Shutdown ();
-	DWORD					Initialize ();
+	DWORD					Initialize (BOOL bSilent);
 	DWORD					StartTimer ();
-	DWORD					InitPDH ();
+	DWORD					InitPDH (BOOL bSilent);
 	DWORD					ClosePDH ();
 	DWORD					ReadSettings ();
 	CString					GetCounterLabel (int nCounter);
@@ -83,6 +100,10 @@ private:
 	CString					GetCounterTooltip (int nCounter);
 	void					UpdateTrayIcons ();
 	void					UpdateTooltips ();
+	void					SetTrayIcon (CSystemTray& oTray, HICON& hCurrent, HICON hNew);
+	void					ShowErrorState (const CString& sMessage, BOOL bBalloon);
+	void					ClearErrorState ();
+	void					HandlePdhError (const CString& sCaller, DWORD nError);
 	void					CheckAlert (int nCounter);
 
 

@@ -39,6 +39,7 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 	}
 
 	SetDefaultSettings (m_oSettings);
+	m_bSecondCounterSeeded	= FALSE;
 	SecureZeroMemory (m_anColors, sizeof (m_anColors));
 	SecureZeroMemory (&m_oPreviewStyle, sizeof (m_oPreviewStyle));
 	SecureZeroMemory (m_aPreview, sizeof (m_aPreview));
@@ -353,6 +354,7 @@ void CDialogConfig::OnBnClickedDefaultvalues()
 	// Default settings for everything except the autostart, which is not part of the settings
 	SetDefaultSettings (m_oSettings);
 	m_nCounterSel	= 0;
+	m_bSecondCounterSeeded	= FALSE;
 	LoadGlobalToControls ();
 	LoadCounterToControls (m_nCounterSel);
 
@@ -389,6 +391,9 @@ void CDialogConfig::OnCbnSelchangeCounterSel ()
 	// Get data from the dialog box into our member variables. m_nCounterSel is now the new counter.
 	if (!UpdateData (TRUE))
 	{
+		// An invalid entry: stay with the previous counter, the controls still show its settings
+		m_nCounterSel	= nPrevious;
+		m_cCounterSel.SetCurSel (nPrevious);
 		return;
 	}
 
@@ -401,11 +406,12 @@ void CDialogConfig::OnCbnSelchangeCounterSel ()
 
 	SaveControlsToCounter (nPrevious);
 
-	// A counter that was never set up starts with the settings of the other one, e.g. the same adapter and units for download and upload
-	if (m_oSettings.aCounters[nNew].sPath.IsEmpty ())
+	// A counter that was never set up starts with the settings of the other one, once. E.g. the same adapter and units for download and upload.
+	if (m_oSettings.aCounters[nNew].sPath.IsEmpty () && !m_bSecondCounterSeeded)
 	{
 		m_oSettings.aCounters[nNew]			= m_oSettings.aCounters[nPrevious];
 		m_oSettings.aCounters[nNew].sPath	= TEXT ("");
+		m_bSecondCounterSeeded				= TRUE;
 	}
 
 	LoadCounterToControls (nNew);
@@ -447,8 +453,11 @@ BOOL CDialogConfig::ApplySettings ()
 
 	if (m_pMainFrame)
 	{
-		// Transmit the settings to the LED
-		m_pMainFrame->ApplySettings (m_oSettings);
+		// Transmit the settings to the LED. If they do not work, the previous settings keep running and the dialog stays open for corrections.
+		if (m_pMainFrame->ApplySettings (m_oSettings) != ERROR_SUCCESS)
+		{
+			return FALSE;
+		}
 
 		// The main window corrects invalid values, show the corrected values
 		m_pMainFrame->GetSettings (m_oSettings);
@@ -749,15 +758,22 @@ void CDialogConfig::SelectPathInBrowser ()
 	if (!m_sCounterPath.IsEmpty () && ParsePerfPath (m_sCounterPath, sMachine, sObject, sInstance, sCounter))
 	{
 		// Select the object in the list. This fills and selects counters and instances.
-		m_cSelectPerfObjects.SelectString (-1, sObject);
-		OnCbnSelchangePerfObjects ();
+		int	nIndex	= m_cSelectPerfObjects.FindStringExact (-1, sObject);
+		if (nIndex != CB_ERR)
+		{
+			m_cSelectPerfObjects.SetCurSel (nIndex);
+			OnCbnSelchangePerfObjects ();
+			return;
+		}
 	}
-	else
-	{
-		m_sPerfDescription.Empty ();
-		m_sSelectedPerfPath.Empty ();
-		UpdateData (FALSE);
-	}
+
+	// No path, or its object is not in the list: nothing is selected
+	m_sPerfObject.Empty ();
+	m_sPerfCounter.Empty ();
+	m_sPerfInstance.Empty ();
+	m_sPerfDescription.Empty ();
+	m_sSelectedPerfPath.Empty ();
+	UpdateData (FALSE);
 }
 
 
@@ -782,7 +798,10 @@ void CDialogConfig::OnCbnSelchangePerfObjects ()
 	m_cSelectPerfInstances.ResetContent ();
 
 	// Get data from the dialog box into our member variables
-	UpdateData (TRUE);
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
 
 	// Zero the buffer memory allocated earlier
 	if (m_sBufferCounters)
@@ -906,10 +925,18 @@ void CDialogConfig::OnCbnSelchangePerfObjects ()
 		if (sObject.CompareNoCase (m_sPerfObject) == 0)
 		{
 			// Select the counter
-			m_cSelectPerfCounters.SelectString (-1, sCounter);
+			int	nFound	= m_cSelectPerfCounters.FindStringExact (-1, sCounter);
+			if (nFound != CB_ERR)
+			{
+				m_cSelectPerfCounters.SetCurSel (nFound);
+			}
 
 			// Select the instance
-			m_cSelectPerfInstances.SelectString (-1, sInstance);
+			nFound	= sInstance.IsEmpty () ? CB_ERR : m_cSelectPerfInstances.FindStringExact (-1, sInstance);
+			if (nFound != CB_ERR)
+			{
+				m_cSelectPerfInstances.SetCurSel (nFound);
+			}
 		}
 	}
 
@@ -1007,7 +1034,10 @@ CleanUp:
 void CDialogConfig::OnBnClickedUseSelectedDataSource()
 {
 	// Get data from the dialog box into our member variables
-	UpdateData (TRUE);
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
 
 	// Did the user select a valid data source?
 	if (m_sPerfObject.IsEmpty ())
@@ -1157,7 +1187,10 @@ void CDialogConfig::OnCbnSelchangePerfCounters()
 	CString		sInstance;
 
 	// Get data from the dialog box into our member variables
-	UpdateData (TRUE);
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
 
 	// By default, use the instance from the combo box
 	sInstance	= m_sPerfInstance;
@@ -1220,7 +1253,10 @@ void CDialogConfig::OnCbnSelchangePerfInstances ()
 	CString sExplainText;
 
 	// Get data into member variables
-	UpdateData (TRUE);
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
 
 	// Is this combo box empty? If so, empty the description.
 	if (m_sPerfInstance.IsEmpty () && m_cSelectPerfInstances.GetCount () > 0)

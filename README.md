@@ -38,14 +38,18 @@ These are stored per counter, in `[Performance Counter 1]` and `[Performance Cou
 In `[Performance Counter 1]`:
 
 - `LEDType`: the icon type, see above.
-- `UpdateInterval`: milliseconds between updates. Use about 1000 for the graph.
+- `UpdateInterval`: milliseconds between updates, 10 to 3600000. Use about 1000 for the graph.
 - `SecondCounter`: `1` shows a second counter. The bar types show the two counters side by side in one icon and the graph one above the other. The number is too small to share, so it gets two tray icons, one per counter, each with its own unit. The tooltip lists both counters.
 - `ColorLow`, `ColorMid`, `ColorHigh`: the colours as `RRGGBB` hex, for example `00DC00`.
 - `ThresholdMid`, `ThresholdHigh`: the percentage of the scale where the mid and the high colour start (defaults 50 and 75). The LED only uses the low colour.
 
 ### Start with Windows
 
-The **Start with Windows** checkbox adds or removes a per-user entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` for this copy of the executable (no admin rights needed). Each copy, in its own folder with its own INI, gets its own entry. If you move the executable, untick and re-tick the option from the new location.
+The **Start with Windows** checkbox adds or removes a per-user entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` for this copy of the executable (no admin rights needed). Each copy, in its own folder with its own INI, gets its own entry. If you move the executable, untick and re-tick the option from the new location. An entry that was disabled in Task Manager's Startup tab shows as unticked, ticking it enables it again.
+
+### Errors
+
+If the counters cannot be read, for example because a network adapter disappeared or Windows has not finished starting, DiskLED shows an error icon and the problem in the tooltip, shows one notification, and tries to reconnect every 5 seconds. Applying settings in the dialog with a counter path that does not work shows a message, keeps the previous settings running and leaves the dialog open.
 
 ## Examples
 

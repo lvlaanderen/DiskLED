@@ -114,7 +114,7 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "Settings for:",IDC_STATIC,7,9,44,8
     COMBOBOX        IDC_COMBO_COUNTERSEL,53,7,60,40,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Use a &second counter",IDC_CHECK_COUNTER2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,9,110,10
+    CONTROL         "Use a seco&nd counter",IDC_CHECK_COUNTER2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,9,110,10
     GROUPBOX        "Select data source:",IDC_STATIC,7,24,328,180
     LTEXT           "&Object:",IDC_COUNTERPATH_TEXT2,17,37,25,8
     COMBOBOX        IDC_PERF_OBJECTS,17,48,305,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
@@ -129,7 +129,7 @@ BEGIN
     EDITTEXT        IDC_COUNTERPATH_EDIT,7,221,226,12,ES_AUTOHSCROLL | ES_READONLY
     LTEXT           "In order to be able to calculate system activity, DiskLED needs to know which value from the performance counter path shown above is equivalent to 100% utilization.",IDC_100PERCENT_TEXT,7,240,226,26
     LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,269,55,8
-    EDITTEXT        IDC_100PERCENT_EDIT,75,267,50,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_100PERCENT_EDIT,75,267,50,12,ES_RIGHT | ES_AUTOHSCROLL
     LTEXT           "How often should DiskLED get new performance data and update its icon? Enter a value in milliseconds for the interval between consecutive updates.",IDC_100PERCENT_TEXT3,7,283,226,26
     LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,312,62,8
     EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,310,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
@@ -138,12 +138,12 @@ BEGIN
     COMBOBOX        IDC_COMBO_ICONTYPE,264,225,64,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
     GROUPBOX        "Preview:",IDC_STATIC,257,248,78,76
     CONTROL         "",IDC_PREVIEW,"Static",SS_OWNERDRAW,262,258,68,62
-    LTEXT           "Value &format:",IDC_VALUEFORMAT_TEXT,7,334,50,8,WS_GROUP
+    LTEXT           "Value for&mat:",IDC_VALUEFORMAT_TEXT,7,334,50,8,WS_GROUP
     COMBOBOX        IDC_COMBO_VALUEFORMAT,60,332,60,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Scale:",IDC_STATIC,126,334,24,8
+    LTEXT           "Scal&e:",IDC_STATIC,126,334,24,8
     COMBOBOX        IDC_COMBO_SCALEMODE,152,332,50,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "&Invert",IDC_CHECK_INVERT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,208,333,48,10
-    LTEXT           "&Warn above",IDC_STATIC,7,350,40,8
+    CONTROL         "In&vert",IDC_CHECK_INVERT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,208,333,48,10
+    LTEXT           "Wa&rn above",IDC_STATIC,7,350,40,8
     EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "% of the 100% value, for",IDC_STATIC,75,350,84,8
     EDITTEXT        IDC_EDIT_ALERT_SECONDS,160,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
@@ -314,7 +314,7 @@ BEGIN
                             "How often to update the display (in milliseconds)"
     IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). With Peak and Decay the 100% value is the minimum."
     IDS_TOOLTIP_COUNTERSEL  "Which counter the settings below belong to. With a second counter, each counter has its own data source, 100% value, format, scale and warning."
-    IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for graph and number."
+    IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for the graph. The number icon gets a second tray icon instead."
     IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the 100% value for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_UPDATE_INI  "Update the INI configuration file when applying settings?"
     IDS_TOOLTIP_DEFAULT_VALUES "Restore default values?"
@@ -323,7 +323,7 @@ BEGIN
     IDS_TOOLTIP_DESCRIPTION "Description of the selected counter"
     IDS_TOOLTIP_OBJECTS     "Select a performance object"
     IDS_TOOLTIP_COUNTERS    "Select a performance object's counter"
-    IDS_TOOLTIP_INSTANCES   "Selece a performance counter instance"
+    IDS_TOOLTIP_INSTANCES   "Select a performance counter instance"
 END
 
 #endif    // English (U.S.) resources

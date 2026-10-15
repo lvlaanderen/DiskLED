@@ -1,3 +1,5 @@
+#pragma once
+
 DWORD	ReadINIValue (CString sINIFile, CString sSection, CString sKey, CString* sValue);
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const CString &sValue);
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const int &nValue);
@@ -11,4 +13,3 @@ CString	LocalPathToEnglish (const CString& sPath);
 CString	EnglishPathToLocal (const CString& sPath);
 DWORD	GetFileAttributesAPIWrapper (CString sPath, DWORD* nAttributes);
 BOOL	Split (CString sDelimiter, CString sInput, CStringArray* asOutput);
-void	SelectComboBoxString (CComboBox& oBox, CString& sItem);

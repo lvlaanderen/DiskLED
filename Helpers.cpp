@@ -182,7 +182,7 @@ DWORD WriteINIValue (const CString &sINIFile, const CString &sSection, const CSt
 DWORD WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const double &nValue)
 {
 	CString	sValue;
-	sValue.Format (TEXT ("%f"), nValue);
+sValue.Format (TEXT ("%.15g"), nValue);
 
 	return WriteINIValue (sINIFile, sSection, sKey, sValue);
 }
@@ -465,6 +465,43 @@ CString EnglishPathToLocal (const CString& sPath)
 
 #define AUTOSTART_REG_KEY	TEXT ("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
 
+// Windows 8 and later keep the enabled/disabled state shown in Task Manager's Startup tab here
+#define AUTOSTART_APPROVED_REG_KEY	TEXT ("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run")
+
+// Disabled in Task Manager? The first byte of the value is even (2, 6) when enabled and odd (3, 7) when disabled.
+static BOOL IsStartupDisabled (const CString& sName)
+{
+	HKEY	hKey		= NULL;
+	BOOL	bDisabled	= FALSE;
+
+	if (RegOpenKeyEx (HKEY_CURRENT_USER, AUTOSTART_APPROVED_REG_KEY, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+	{
+		BYTE	abData[16]	= { 0 };
+		DWORD	nSize		= sizeof (abData);
+		DWORD	nType		= 0;
+
+		if (RegQueryValueEx (hKey, sName, NULL, &nType, abData, &nSize) == ERROR_SUCCESS && nType == REG_BINARY && nSize >= 1)
+		{
+			bDisabled	= (abData[0] & 1) != 0;
+		}
+		RegCloseKey (hKey);
+	}
+
+	return bDisabled;
+}
+
+// Forget the Task Manager state, so an entry we add is enabled and a removed entry leaves nothing behind
+static void ClearStartupApproval (const CString& sName)
+{
+	HKEY	hKey	= NULL;
+
+	if (RegOpenKeyEx (HKEY_CURRENT_USER, AUTOSTART_APPROVED_REG_KEY, 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+	{
+		RegDeleteValue (hKey, sName);
+		RegCloseKey (hKey);
+	}
+}
+
 static CString GetAutoStartEntry (CString& sCommand)
 {
 	TCHAR	sPath[MAX_PATH]	= { 0 };
@@ -490,7 +527,7 @@ BOOL IsAutoStartEnabled ()
 
 		if (RegQueryValueEx (hKey, sName, NULL, &nType, (LPBYTE) sData, &nSize) == ERROR_SUCCESS && nType == REG_SZ)
 		{
-			bResult	= (sCommand.CompareNoCase (sData) == 0);
+			bResult	= (sCommand.CompareNoCase (sData) == 0) && !IsStartupDisabled (sName);
 		}
 		RegCloseKey (hKey);
 	}
@@ -513,6 +550,10 @@ DWORD SetAutoStart (BOOL bEnable)
 			nError	= RegSetValueEx (hKey, sName, 0, REG_SZ, (const BYTE*) (LPCTSTR) sCommand, (sCommand.GetLength () + 1) * sizeof (TCHAR));
 			RegCloseKey (hKey);
 		}
+		if (nError == ERROR_SUCCESS)
+		{
+			ClearStartupApproval (sName);
+		}
 	}
 	else
 	{
@@ -528,6 +569,7 @@ DWORD SetAutoStart (BOOL bEnable)
 		{
 			nError	= ERROR_SUCCESS;
 		}
+		ClearStartupApproval (sName);
 	}
 
 	return nError;

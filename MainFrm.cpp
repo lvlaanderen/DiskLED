@@ -48,10 +48,16 @@ CMainFrame::CMainFrame()
 {
 	m_TimerID				= 0;
 	m_pTrayIcon2			= NULL;
+	m_hIcon1				= NULL;
+	m_hIcon2				= NULL;
 	m_hQuery				= NULL;
 	m_nCounters				= 1;
 	m_nIconKey				= ICONKEY_NONE;
+	m_nIconKey2				= ICONKEY_NONE;
 	m_nLastTooltipTick		= 0;
+	m_bPdhError				= FALSE;
+	m_bErrorShown			= FALSE;
+	m_nRetryTick			= 0;
 
 	SetDefaultSettings (m_oSettings);
 	MakeIconStyle (m_oSettings, m_oStyle);
@@ -63,8 +69,22 @@ CMainFrame::~CMainFrame()
 {
 	if (m_pTrayIcon2)
 	{
+		m_pTrayIcon2->RemoveIcon ();
 		delete m_pTrayIcon2;
 		m_pTrayIcon2	= NULL;
+	}
+
+	// The icons are only released once the tray icons are gone
+	m_TrayIcon.RemoveIcon ();
+	if (m_hIcon1)
+	{
+		DestroyIcon (m_hIcon1);
+		m_hIcon1	= NULL;
+	}
+	if (m_hIcon2)
+	{
+		DestroyIcon (m_hIcon2);
+		m_hIcon2	= NULL;
 	}
 }
 
@@ -92,8 +112,8 @@ int CMainFrame::OnCreate (LPCREATESTRUCT lpCreateStruct)
 	// Read settings (from INI, if present)
 	ReadSettings ();
 
-	// Initialize counters and timer
-	Initialize ();
+	// Initialize counters and timer. Without a message box: the counters may not be ready right after logon, the timer keeps trying.
+	Initialize (TRUE);
 
 	return 0;
 }
@@ -170,18 +190,19 @@ void CMainFrame::LogError (CString sCaller, CString sFailedComponent, DWORD nErr
 		sError	+= sHelpMessage;
 	}
 
-	// Display the message
-	MessageBox (sError);
+	// Display the message. The frame window is hidden and the config dialog may be open, so make sure the box is seen.
+	MessageBox (sError, PROGRAM_NAME, MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
 //	Initialize PDH (performance monitor API)
+//	With bSilent, errors are only stored in m_sLastError, otherwise they are also shown in a message box
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-DWORD CMainFrame::InitPDH ()
+DWORD CMainFrame::InitPDH (BOOL bSilent)
 {
 	PDH_STATUS	nError	= ERROR_INVALID_FUNCTION;
 
@@ -198,7 +219,11 @@ DWORD CMainFrame::InitPDH ()
 	if(nError != ERROR_SUCCESS)
 	{
 		ClosePDH ();
-		LogError (TEXT ("InitPDH"), TEXT ("PdhOpenQuery"), nError);
+		m_sLastError.Format (TEXT ("PdhOpenQuery failed with 0x%x"), nError);
+		if (!bSilent)
+		{
+			LogError (TEXT ("InitPDH"), TEXT ("PdhOpenQuery"), nError);
+		}
 		return nError;
 	}
 
@@ -221,7 +246,11 @@ DWORD CMainFrame::InitPDH ()
 				sExplanation	= TEXT ("This probably means that the performance counter path is invalid: <") + sPath + TEXT (">");
 			}
 			ClosePDH ();
-			LogError (TEXT ("InitPDH"), (i == 0) ? TEXT ("PdhAddCounter") : TEXT ("PdhAddCounter (second counter)"), nError, sExplanation);
+			m_sLastError.Format (TEXT ("PdhAddCounter failed with 0x%x for %s"), nError, (LPCTSTR) sPath);
+			if (!bSilent)
+			{
+				LogError (TEXT ("InitPDH"), (i == 0) ? TEXT ("PdhAddCounter") : TEXT ("PdhAddCounter (second counter)"), nError, sExplanation);
+			}
 			return nError;
 		}
 	}
@@ -231,7 +260,11 @@ DWORD CMainFrame::InitPDH ()
 	if (nError != ERROR_SUCCESS && nError != PDH_NO_DATA)
 	{
 		ClosePDH ();
-		LogError (TEXT ("InitPDH"), TEXT ("PdhCollectQueryData"), nError);
+		m_sLastError.Format (TEXT ("PdhCollectQueryData failed with 0x%x"), nError);
+		if (!bSilent)
+		{
+			LogError (TEXT ("InitPDH"), TEXT ("PdhCollectQueryData"), nError);
+		}
 		return nError;
 	}
 
@@ -324,21 +357,6 @@ LRESULT CMainFrame::OnTrayNotification(WPARAM wParam, LPARAM lParam)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The tooltip of one counter's own tray icon: the current value and the counter path
-//
-////////////////////////////////////////////////////////////////////////////////
-
-CString CMainFrame::GetCounterTooltip (int nCounter)
-{
-	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
-
-	return FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED)
-		+ TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
 //	The name of a counter for tooltips and alerts: the last part of its path
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -352,8 +370,11 @@ CString CMainFrame::GetCounterLabel (int nCounter)
 
 	if (!ParsePerfPath (m_oSettings.aCounters[nCounter].sPath, sMachine, sObject, sInstance, sCounter))
 	{
-		return m_oSettings.aCounters[nCounter].sPath;
+		sCounter	= m_oSettings.aCounters[nCounter].sPath;
 	}
+
+	// Keep tooltips and balloons within their length limits
+	sCounter.Truncate (48);
 
 	return sCounter;
 }
@@ -361,7 +382,7 @@ CString CMainFrame::GetCounterLabel (int nCounter)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The tooltip: the current value(s), and the counter path or name(s)
+//	The tooltip of the tray icon that shows several counters: the current values, and the counter names
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -395,8 +416,23 @@ CString CMainFrame::GetTooltipText ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	The tooltip of one counter's own tray icon: the current value and the counter path
+//
+////////////////////////////////////////////////////////////////////////////////
+
+CString CMainFrame::GetCounterTooltip (int nCounter)
+{
+	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
+
+	return FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED)
+		+ TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Show a balloon when a value has been above its alert threshold for the configured time
-//	The balloon is shown once per period above the threshold
+//	The balloon is shown once per period above the threshold. Short dips below the threshold do not end the period.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -413,21 +449,34 @@ void CMainFrame::CheckAlert (int nCounter)
 	double	dPercent	= m_aIcon[nCounter].dValue * 100.0 / oCounter.d100Percent;
 	DWORD	nTick		= GetTickCount ();
 
-	if (dPercent < oCounter.nAlertPercent)
+	if (!(dPercent >= oCounter.nAlertPercent))
 	{
-		// Back to normal: the next period above the threshold raises a new alert
-		oRuntime.bAbove		= FALSE;
-		oRuntime.bAlerted	= FALSE;
+		if (oRuntime.bAbove)
+		{
+			if (!oRuntime.bBelow)
+			{
+				oRuntime.bBelow			= TRUE;
+				oRuntime.nBelowSince	= nTick;
+			}
+			else if (nTick - oRuntime.nBelowSince >= ALERT_DIP_MS)
+			{
+				// Back to normal: the next period above the threshold raises a new alert
+				oRuntime.bAbove		= FALSE;
+				oRuntime.bBelow		= FALSE;
+				oRuntime.bAlerted	= FALSE;
+			}
+		}
 		return;
 	}
 
+	oRuntime.bBelow	= FALSE;
 	if (!oRuntime.bAbove)
 	{
 		oRuntime.bAbove			= TRUE;
 		oRuntime.nAboveSince	= nTick;
 	}
 
-	if (!oRuntime.bAlerted && nTick - oRuntime.nAboveSince >= (DWORD) oCounter.nAlertSeconds * 1000)
+	if (!oRuntime.bAlerted && (ULONGLONG) (nTick - oRuntime.nAboveSince) >= (ULONGLONG) oCounter.nAlertSeconds * 1000)
 	{
 		CString	sText;
 
@@ -435,8 +484,91 @@ void CMainFrame::CheckAlert (int nCounter)
 		sText.Format (TEXT ("%s: %s, above %d%% of the maximum for %d s."), (LPCTSTR) GetCounterLabel (nCounter),
 			(LPCTSTR) FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED),
 			oCounter.nAlertPercent, oCounter.nAlertSeconds);
+
+		// The balloon text is limited to 255 characters
+		sText.Truncate (255);
 		m_TrayIcon.ShowBalloon (sText, PROGRAM_NAME, NIIF_WARNING, 10);
 	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Set a new icon on a tray icon. The tray class keeps using the icon (it re-adds it when Explorer restarts),
+//	so the previous icon is only destroyed once the new one is set.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::SetTrayIcon (CSystemTray& oTray, HICON& hCurrent, HICON hNew)
+{
+	if (hNew == NULL)
+	{
+		return;
+	}
+
+	oTray.SetIcon (hNew);
+	if (hCurrent)
+	{
+		DestroyIcon (hCurrent);
+	}
+	hCurrent	= hNew;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The counters cannot be read: show an error icon and the problem in the tooltip. The timer keeps trying to reconnect.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::ShowErrorState (const CString& sMessage, BOOL bBalloon)
+{
+	int		nSize	= GetSystemMetrics (SM_CXSMICON);
+
+	m_bPdhError		= TRUE;
+	m_nRetryTick	= GetTickCount ();
+
+	SetTrayIcon (m_TrayIcon, m_hIcon1, (HICON) LoadImage (AfxGetResourceHandle (), MAKEINTRESOURCE (IDI_ICON6), IMAGE_ICON, nSize, nSize, 0));
+	m_TrayIcon.SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + sMessage);
+	if (m_pTrayIcon2)
+	{
+		SetTrayIcon (*m_pTrayIcon2, m_hIcon2, (HICON) LoadImage (AfxGetResourceHandle (), MAKEINTRESOURCE (IDI_ICON6), IMAGE_ICON, nSize, nSize, 0));
+		m_pTrayIcon2->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + sMessage);
+	}
+
+	// Report the problem once per error period
+	if (bBalloon && !m_bErrorShown)
+	{
+		CString	sText	= sMessage + TEXT (". DiskLED keeps trying.");
+
+		sText.Truncate (255);
+		m_bErrorShown	= TRUE;
+		m_TrayIcon.ShowBalloon (sText, PROGRAM_NAME, NIIF_ERROR, 10);
+	}
+}
+
+
+void CMainFrame::ClearErrorState ()
+{
+	m_bPdhError			= FALSE;
+	m_bErrorShown		= FALSE;
+	m_nIconKey			= ICONKEY_NONE;
+	m_nIconKey2			= ICONKEY_NONE;
+	m_nLastTooltipTick	= 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Reading the counters failed while running: stop the query, show the error and reconnect later
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::HandlePdhError (const CString& sCaller, DWORD nError)
+{
+	ClosePDH ();
+	m_sLastError.Format (TEXT ("%s failed with 0x%x"), (LPCTSTR) sCaller, nError);
+	ShowErrorState (m_sLastError, TRUE);
 }
 
 
@@ -449,10 +581,19 @@ void CMainFrame::CheckAlert (int nCounter)
 void CMainFrame::OnTimer (UINT_PTR nIDEvent) 
 {
 	PDH_STATUS	nError	= ERROR_INVALID_FUNCTION;
+	DWORD		nTick	= GetTickCount ();
 
 	if (m_hQuery == NULL)
 	{
-		// Not initialized
+		// Not connected. After an error, try again from time to time.
+		if (m_bPdhError && nTick - m_nRetryTick >= PDH_RETRY_MS)
+		{
+			m_nRetryTick	= nTick;
+			if (InitPDH (TRUE) == ERROR_SUCCESS)
+			{
+				ClearErrorState ();
+			}
+		}
 		return;
 	}
 
@@ -460,14 +601,7 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 	nError	= PdhCollectQueryData (m_hQuery);
 	if (nError != ERROR_SUCCESS)
 	{
-		ClosePDH ();
-
-		CString	sExplanation;
-		if (nError == PDH_NO_DATA)
-		{
-			sExplanation	= TEXT ("PDH_NO_DATA - No data is available for this performance counter.");
-		}
-		LogError (TEXT ("OnTimer"), TEXT ("PdhCollectQueryData"), nError, sExplanation);
+		HandlePdhError (TEXT ("PdhCollectQueryData"), nError);
 		return;
 	}
 
@@ -478,8 +612,8 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		IconCounter&			oIcon		= m_aIcon[i];
 		PDH_FMT_COUNTERVALUE	oValue;
 
-		// Get the counter data as floating point number
-		nError	= PdhGetFormattedCounterValue (oRuntime.hCounter, PDH_FMT_DOUBLE, 0, &oValue);
+		// Get the counter data as floating point number. Percentage counters are not capped at 100 (e.g. a process using several cores).
+		nError	= PdhGetFormattedCounterValue (oRuntime.hCounter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, 0, &oValue);
 		if (nError != ERROR_SUCCESS)
 		{
 			// Let's have a look at the error message
@@ -492,8 +626,7 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 			}
 			else
 			{
-				ClosePDH ();
-				LogError (TEXT ("OnTimer"), TEXT ("PdhGetFormattedCounterValue"), nError);
+				HandlePdhError (TEXT ("PdhGetFormattedCounterValue"), nError);
 				return;
 			}
 		}
@@ -503,8 +636,9 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		{
 			dValue	= oCounter.d100Percent - dValue;
 		}
-		if (dValue < 0)
+		if (!(dValue > 0))
 		{
+			// Also catches NaN
 			dValue	= 0;
 		}
 
@@ -528,24 +662,30 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		}
 		else if (oCounter.nScaleMode == SCALEMODE_DECAY)
 		{
-			// The peak falls by half every DECAY_HALFLIFE_MS, a higher value becomes the new peak
-			double	dDecayed	= oRuntime.dDecayPeak * pow (0.5, (double) m_oSettings.nUpdateInterval / DECAY_HALFLIFE_MS);
+			// The peak falls by half every DECAY_HALFLIFE_MS (measured, the timer is not exact), a higher value becomes the new peak
+			DWORD	nElapsed	= (oRuntime.nLastTick != 0) ? nTick - oRuntime.nLastTick : m_oSettings.nUpdateInterval;
+			if (nElapsed > 60000)
+			{
+				nElapsed	= 60000;
+			}
+
+			double	dDecayed	= oRuntime.dDecayPeak * pow (0.5, (double) nElapsed / DECAY_HALFLIFE_MS);
 			oRuntime.dDecayPeak	= (dValue > dDecayed) ? dValue : dDecayed;
 			if (oRuntime.dDecayPeak > dScale)
 			{
 				dScale	= oRuntime.dDecayPeak;
 			}
 		}
-		oIcon.dScale	= dScale;
+		oRuntime.nLastTick	= nTick;
+		oIcon.dScale		= dScale;
 
 		CheckAlert (i);
 	}
 
-	// Update the icon. Some icon types only change in a few steps and are redrawn when the step changes.
+	// Update the icon(s). Icons are only redrawn when what they show changes.
 	UpdateTrayIcons ();
 
 	// Show the current value in the tooltip (throttled, the shell does not need to be updated on every tick)
-	DWORD	nTick	= GetTickCount ();
 	if (nTick - m_nLastTooltipTick >= TOOLTIP_UPDATE_MS)
 	{
 		m_nLastTooltipTick	= nTick;
@@ -559,41 +699,38 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Update the tray icon(s). Some icon types only change in a few steps and are redrawn when the step changes.
+//	Update the tray icon(s)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 void CMainFrame::UpdateTrayIcons ()
 {
+	int		nSize	= GetSystemMetrics (SM_CXSMICON);
+
 	if (m_pTrayIcon2)
 	{
 		// One icon per counter
-		HICON	hIcon1	= CreateTrayIconImage (m_oStyle, &m_aIcon[0], 1);
-		HICON	hIcon2	= CreateTrayIconImage (m_oStyle, &m_aIcon[1], 1);
+		DWORD	nKey1	= GetIconKey (m_oStyle, &m_aIcon[0], 1, nSize);
+		DWORD	nKey2	= GetIconKey (m_oStyle, &m_aIcon[1], 1, nSize);
 
-		if (hIcon1)
+		if (nKey1 != m_nIconKey)
 		{
-			m_TrayIcon.SetIcon (hIcon1);
-			DestroyIcon (hIcon1);
+			SetTrayIcon (m_TrayIcon, m_hIcon1, CreateTrayIconImage (m_oStyle, &m_aIcon[0], 1));
+			m_nIconKey	= nKey1;
 		}
-		if (hIcon2)
+		if (nKey2 != m_nIconKey2)
 		{
-			m_pTrayIcon2->SetIcon (hIcon2);
-			DestroyIcon (hIcon2);
+			SetTrayIcon (*m_pTrayIcon2, m_hIcon2, CreateTrayIconImage (m_oStyle, &m_aIcon[1], 1));
+			m_nIconKey2	= nKey2;
 		}
 		return;
 	}
 
-	DWORD	nIconKey	= GetIconKey (m_oStyle, m_aIcon, m_nCounters, GetSystemMetrics (SM_CXSMICON));
-	if (nIconKey == ICONKEY_ALWAYS || nIconKey != m_nIconKey)
+	DWORD	nKey	= GetIconKey (m_oStyle, m_aIcon, m_nCounters, nSize);
+	if (nKey != m_nIconKey)
 	{
-		HICON	hIcon	= CreateTrayIconImage (m_oStyle, m_aIcon, m_nCounters);
-		if (hIcon)
-		{
-			m_TrayIcon.SetIcon (hIcon);
-			DestroyIcon (hIcon);
-			m_nIconKey	= nIconKey;
-		}
+		SetTrayIcon (m_TrayIcon, m_hIcon1, CreateTrayIconImage (m_oStyle, m_aIcon, m_nCounters));
+		m_nIconKey	= nKey;
 	}
 }
 
@@ -667,10 +804,11 @@ DWORD CMainFrame::ReadSettings ()
 ////////////////////////////////////////////////////////////////////////////////
 //
 //	Initialize the performance counters and the timer
+//	If the counters cannot be read, the timer keeps running and tries again
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-DWORD CMainFrame::Initialize ()
+DWORD CMainFrame::Initialize (BOOL bSilent)
 {
 	DWORD	nError	= ERROR_INVALID_FUNCTION;
 
@@ -690,12 +828,23 @@ DWORD CMainFrame::Initialize ()
 				m_pTrayIcon2	= NULL;
 			}
 		}
+
+		// Without a second tray icon only the first counter is shown, two numbers do not fit in one icon
+		if (m_pTrayIcon2 == NULL)
+		{
+			m_nCounters	= 1;
+		}
 	}
 	else if (m_pTrayIcon2)
 	{
 		m_pTrayIcon2->RemoveIcon ();
 		delete m_pTrayIcon2;
 		m_pTrayIcon2	= NULL;
+		if (m_hIcon2)
+		{
+			DestroyIcon (m_hIcon2);
+			m_hIcon2	= NULL;
+		}
 	}
 
 	// Start without history
@@ -706,21 +855,16 @@ DWORD CMainFrame::Initialize ()
 		m_aIcon[i].dScale		= m_oSettings.aCounters[i].d100Percent;
 		m_aIcon[i].nValueFormat	= m_oSettings.aCounters[i].nValueFormat;
 	}
-	m_nIconKey	= ICONKEY_NONE;
+	ClearErrorState ();
 
 	// Init PDH
-	nError	= InitPDH ();
+	nError	= InitPDH (bSilent);
 	if (nError != ERROR_SUCCESS)
 	{
-		KillTimer (m_TimerID);
-		m_TimerID	= 0;
+		ShowErrorState (m_sLastError, bSilent);
 
-		// Set an error icon
-		m_TrayIcon.SetIcon (IDI_ICON6);
-		if (m_pTrayIcon2)
-		{
-			m_pTrayIcon2->SetIcon (IDI_ICON6);
-		}
+		// Keep the timer running: it retries
+		StartTimer ();
 
 		return nError;
 	}
@@ -735,6 +879,7 @@ DWORD CMainFrame::Initialize ()
 		m_pTrayIcon2->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + m_oSettings.aCounters[1].sPath);
 		return nError;
 	}
+
 	CString	sToolTipText	= PROGRAM_NAME;
 	sToolTipText			+= TEXT (" - ") + ((m_nCounters == 1) ? m_oSettings.aCounters[0].sPath : GetCounterLabel (0) + TEXT (" / ") + GetCounterLabel (1));
 	m_TrayIcon.SetTooltipText (sToolTipText);
@@ -757,15 +902,24 @@ void CMainFrame::GetSettings (DiskLEDSettings& oSettings)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Use new settings
+//	Use new settings. If they do not work, the previous settings are restored.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 DWORD CMainFrame::ApplySettings (const DiskLEDSettings& oSettings)
 {
+	DiskLEDSettings	oPrevious	= m_oSettings;
+
 	m_oSettings	= oSettings;
 
-	return Initialize ();
+	DWORD	nError	= Initialize (FALSE);
+	if (nError != ERROR_SUCCESS)
+	{
+		m_oSettings	= oPrevious;
+		Initialize (TRUE);
+	}
+
+	return nError;
 }
 
 
