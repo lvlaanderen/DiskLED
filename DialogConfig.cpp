@@ -22,6 +22,7 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_nUpdateINI(0)
 														, m_d100Percent(0)
 														, m_nTab(0)
+														, m_bDark(FALSE)
 														, m_dLinkSpeed(0)
 														, m_sCounterPath(_T(""))
 														, m_sPerfObject(_T(""))
@@ -153,6 +154,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_BN_CLICKED(IDC_USE_LINKSPEED, &CDialogConfig::OnBnClickedUseLinkSpeed)
 	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
 	ON_WM_DRAWITEM()
+	ON_WM_CTLCOLOR()
 	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CDialogConfig::OnTcnSelchangeTab)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
@@ -479,6 +481,16 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Call the base class's handler
 	CDialog::OnInitDialog ();
 
+	// Dark theme, if Windows apps use it
+	m_bDark	= IsDarkModeEnabled ();
+	if (m_bDark)
+	{
+		m_brBack.CreateSolidBrush (DARK_COLOR_BACK);
+		m_brEdit.CreateSolidBrush (DARK_COLOR_EDIT);
+		EnableDarkMode (m_hWnd);
+		m_cTab.SetDark (TRUE);
+	}
+
 	// Set up tooltip support
 	if (m_oToolTip.Create (this))
 	{
@@ -578,8 +590,35 @@ BOOL CDialogConfig::OnInitDialog ()
 void CDialogConfig::OnDestroy ()
 {
 	KillTimer (PREVIEW_TIMER_ID);
+	if (m_bDark)
+	{
+		ReleaseDarkMode ();
+	}
 
 	CDialog::OnDestroy ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Dark theme: the dialog colours the background and the texts of its controls
+//
+////////////////////////////////////////////////////////////////////////////////
+
+HBRUSH CDialogConfig::OnCtlColor (CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	if (!m_bDark)
+	{
+		return CDialog::OnCtlColor (pDC, pWnd, nCtlColor);
+	}
+
+	int		nID		= pWnd->GetDlgCtrlID ();
+	BOOL	bField	= (nCtlColor == CTLCOLOR_EDIT || nCtlColor == CTLCOLOR_LISTBOX || nID == IDC_COUNTERPATH_EDIT || nID == IDC_PERF_DESCRIPTION);
+
+	pDC->SetTextColor (DARK_COLOR_TEXT);
+	pDC->SetBkColor (bField ? DARK_COLOR_EDIT : DARK_COLOR_BACK);
+
+	return bField ? (HBRUSH) m_brEdit : (HBRUSH) m_brBack;
 }
 
 
@@ -897,7 +936,7 @@ void CDialogConfig::OnDrawItem (int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 			nZoom	= 1;
 		}
 
-		pDC->FillSolidRect (oRect, GetSysColor (COLOR_BTNFACE));
+		pDC->FillSolidRect (oRect, m_bDark ? DARK_COLOR_BACK : GetSysColor (COLOR_BTNFACE));
 
 		if (oMemDC.CreateCompatibleDC (pDC) && oBitmap.CreateCompatibleBitmap (pDC, nSize, nSize))
 		{

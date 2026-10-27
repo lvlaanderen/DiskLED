@@ -238,6 +238,7 @@
   <ItemGroup>
     <ClCompile Include="DialogAbout.cpp" />
     <ClCompile Include="DialogConfig.cpp" />
+    <ClCompile Include="DarkMode.cpp" />
     <ClCompile Include="DiskLED.cpp" />
     <ClCompile Include="Helpers.cpp" />
     <ClCompile Include="IconRenderer.cpp" />
@@ -254,6 +255,7 @@
   <ItemGroup>
     <ClInclude Include="DialogAbout.h" />
     <ClInclude Include="DialogConfig.h" />
+    <ClInclude Include="DarkMode.h" />
     <ClInclude Include="DiskLED.h" />
     <ClInclude Include="Helpers.h" />
     <ClInclude Include="IconRenderer.h" />

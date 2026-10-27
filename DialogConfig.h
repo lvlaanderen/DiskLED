@@ -2,6 +2,7 @@
 #include "afxwin.h"
 #include "Settings.h"
 #include "IconRenderer.h"
+#include "DarkMode.h"
 
 
 // Animation of the preview
@@ -47,7 +48,10 @@ private:
 	CStatic		m_cUpdateFrequencyText2;
 	CEdit		m_cUpdateFrequencyEdit;
 	CEdit		m_c100Percent;
-	CTabCtrl	m_cTab;
+	CDarkTabCtrl	m_cTab;
+	BOOL		m_bDark;				// The dialog is shown in the dark theme
+	CBrush		m_brBack;
+	CBrush		m_brEdit;
 	CStatic		m_cLinkSpeedText;
 	CButton		m_cUseLinkSpeed;
 	CEdit		m_cCounterPath;
@@ -142,6 +146,7 @@ public:
 	afx_msg void OnBnClickedApply();
 	afx_msg void OnColorButton(UINT nID);
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnCbnSelchangeCounterSel();
