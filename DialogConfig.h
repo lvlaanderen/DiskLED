@@ -49,6 +49,7 @@ private:
 	CEdit		m_cUpdateFrequencyEdit;
 	CEdit		m_c100Percent;
 	CDarkTabCtrl	m_cTab;
+	CComboBox	m_cQuickPick;
 	BOOL		m_bDark;				// The dialog is shown in the dark theme
 	CBrush		m_brBack;
 	CBrush		m_brEdit;
@@ -154,6 +155,7 @@ public:
 	afx_msg void OnCbnSelchangeValueFormat();
 	afx_msg void OnCbnSelchangeScaleMode();
 	afx_msg void OnBnClickedUseLinkSpeed();
+	afx_msg void OnCbnSelchangeQuickPick();
 	afx_msg void OnCbnSelchangePerfObjects();
 	afx_msg void OnBnClickedUseSelectedDataSource();
 	afx_msg void OnCbnSelchangePerfCounters();

@@ -1,8 +1,10 @@
 #include "stdafx.h"
 #include "Helpers.h"
 #include <pdh.h>
+#include <iphlpapi.h>
 
 #pragma comment(lib, "pdh.lib")
+#pragma comment(lib, "iphlpapi.lib")
 
 
 //////////////////////////////////////////////////////////////////////
@@ -500,6 +502,67 @@ BOOL GetNetworkLinkSpeed (const CString& sEnglishPath, double& dBytesPerSec)
 	}
 
 	return bResult;
+}
+
+
+// The performance counter instance name of the adapter that has the best route to a public address
+CString GetDefaultNetworkInstance ()
+{
+	CString						sInstance;
+	DWORD						nIndex		= 0;
+	ULONG						nSize		= 16 * 1024;
+	ULONG						nResult		= ERROR_INVALID_FUNCTION;
+	IP_ADAPTER_ADDRESSES*		pAddresses	= NULL;
+
+	// 8.8.8.8: only used to find the route, nothing is sent
+	if (GetBestInterface (0x08080808, &nIndex) != NO_ERROR)
+	{
+		return sInstance;
+	}
+
+	for (int nTry = 0; nTry < 2; nTry++)
+	{
+		pAddresses	= (IP_ADAPTER_ADDRESSES*) HeapAlloc (GetProcessHeap (), 0, nSize);
+		if (pAddresses == NULL)
+		{
+			return sInstance;
+		}
+
+		nResult	= GetAdaptersAddresses (AF_UNSPEC, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, NULL, pAddresses, &nSize);
+		if (nResult != ERROR_BUFFER_OVERFLOW)
+		{
+			break;
+		}
+		HeapFree (GetProcessHeap (), 0, pAddresses);
+		pAddresses	= NULL;
+	}
+
+	if (pAddresses == NULL)
+	{
+		return sInstance;
+	}
+
+	if (nResult == NO_ERROR)
+	{
+		for (IP_ADAPTER_ADDRESSES* pAdapter = pAddresses; pAdapter != NULL; pAdapter = pAdapter->Next)
+		{
+			if (pAdapter->IfIndex == nIndex && pAdapter->Description != NULL)
+			{
+				sInstance	= pAdapter->Description;
+				break;
+			}
+		}
+	}
+	HeapFree (GetProcessHeap (), 0, pAddresses);
+
+	// Performance counter instance names do not contain these characters
+	sInstance.Replace ('(', '[');
+	sInstance.Replace (')', ']');
+	sInstance.Replace ('#', '_');
+	sInstance.Replace ('\\', '_');
+	sInstance.Replace ('/', '_');
+
+	return sInstance;
 }
 
 

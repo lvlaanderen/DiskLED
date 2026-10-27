@@ -14,5 +14,8 @@ CString	EnglishPathToLocal (const CString& sPath);
 
 // The speed of the network adapter of a \Network Interface(<instance>)\Bytes ... counter (an English path), in bytes/s. Not the speed of the internet connection!
 BOOL	GetNetworkLinkSpeed (const CString& sEnglishPath, double& dBytesPerSec);
+
+// The performance counter instance name of the network adapter that carries internet traffic (the one with the best route to a public address). Empty if not found.
+CString	GetDefaultNetworkInstance ();
 DWORD	GetFileAttributesAPIWrapper (CString sPath, DWORD* nAttributes);
 BOOL	Split (CString sDelimiter, CString sInput, CStringArray* asOutput);

@@ -114,6 +114,7 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_DEFAULTVALUES, m_cDefaultValues);
 	DDX_Control(pDX, IDC_100PERCENT_EDIT, m_c100Percent);
 	DDX_Control(pDX, IDC_TAB_MAIN, m_cTab);
+	DDX_Control(pDX, IDC_COMBO_QUICKPICK, m_cQuickPick);
 	DDX_Control(pDX, IDC_LINKSPEED_TEXT, m_cLinkSpeedText);
 	DDX_Control(pDX, IDC_USE_LINKSPEED, m_cUseLinkSpeed);
 	DDX_Control(pDX, IDC_COUNTERPATH_EDIT, m_cCounterPath);
@@ -152,6 +153,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_BN_CLICKED(IDC_APPLY, &CDialogConfig::OnBnClickedApply)
 	ON_BN_CLICKED(IDC_USE_SELECTED_DATA_SOURCE, &CDialogConfig::OnBnClickedUseSelectedDataSource)
 	ON_BN_CLICKED(IDC_USE_LINKSPEED, &CDialogConfig::OnBnClickedUseLinkSpeed)
+	ON_CBN_SELCHANGE(IDC_COMBO_QUICKPICK, &CDialogConfig::OnCbnSelchangeQuickPick)
 	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
 	ON_WM_DRAWITEM()
 	ON_WM_CTLCOLOR()
@@ -177,7 +179,8 @@ END_MESSAGE_MAP()
 static const UINT g_aPageDataSource[] =
 {
 	IDC_COUNTERPATH_TEXT2, IDC_PERF_OBJECTS, IDC_COUNTERPATH_TEXT3, IDC_PERF_COUNTERS, IDC_COUNTERPATH_TEXT4, IDC_PERF_INSTANCES,
-	IDC_COUNTERPATH_TEXT5, IDC_PERF_DESCRIPTION, IDC_USE_SELECTED_DATA_SOURCE, IDC_COUNTERPATH_TEXT, IDC_COUNTERPATH_EDIT, 0
+	IDC_COUNTERPATH_TEXT5, IDC_PERF_DESCRIPTION, IDC_USE_SELECTED_DATA_SOURCE, IDC_COUNTERPATH_TEXT, IDC_COUNTERPATH_EDIT,
+	IDC_QUICKPICK_TEXT, IDC_COMBO_QUICKPICK, 0
 };
 
 static const UINT g_aPageScale[] =
@@ -472,6 +475,69 @@ void CDialogConfig::OnBnClickedUseLinkSpeed ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Quick pick: a common data source in one step. The counter, value format and scale are filled in like when choosing a counter in the lists.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnCbnSelchangeQuickPick ()
+{
+	int		nPick	= m_cQuickPick.GetCurSel ();
+	CString	sPath;
+	CString	sLocalPath;
+
+	if (nPick <= 0)
+	{
+		return;
+	}
+	m_cQuickPick.SetCurSel (0);
+
+	switch (nPick)
+	{
+	case 1:
+	case 2:
+		{
+			CString	sAdapter	= GetDefaultNetworkInstance ();
+
+			if (!sAdapter.IsEmpty ())
+			{
+				sPath	= MakePerfPath (TEXT (""), TEXT ("Network Interface"), sAdapter, (nPick == 1) ? TEXT ("Bytes Received/sec") : TEXT ("Bytes Sent/sec"));
+			}
+		}
+		break;
+	case 3:
+		sPath	= TEXT ("\\PhysicalDisk(_Total)\\% Disk Time");
+		break;
+	case 4:
+		sPath	= TEXT ("\\Processor(_Total)\\% Processor Time");
+		break;
+	case 5:
+		sPath	= TEXT ("\\Memory\\% Committed Bytes In Use");
+		break;
+	}
+
+	sLocalPath	= sPath.IsEmpty () ? sPath : EnglishPathToLocal (sPath);
+	if (sLocalPath.IsEmpty () || PdhValidatePath (sLocalPath) != ERROR_SUCCESS)
+	{
+		MessageBox (TEXT ("DiskLED could not find this data source on this computer. Please choose it with the lists below."), TEXT ("DiskLED: Quick pick"), MB_OK | MB_ICONEXCLAMATION);
+		return;
+	}
+
+	// Read the controls first, then replace the data source and everything that depends on it
+	if (!UpdateData (TRUE))
+	{
+		return;
+	}
+	m_sCounterPath	= sLocalPath;
+	ApplyCounterDefaults ();
+	UpdateData (FALSE);
+	RefreshScaleControls ();
+	SelectPathInBrowser ();
+	UpdatePreview ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Initialize the dialog
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -514,6 +580,7 @@ BOOL CDialogConfig::OnInitDialog ()
 		m_oToolTip.AddTool (&m_cDefaultValues, IDS_TOOLTIP_DEFAULT_VALUES);
 		m_oToolTip.AddTool (&m_c100Percent, IDS_TOOLTIP_100PERCENT);
 		m_oToolTip.AddTool (&m_cUseLinkSpeed, IDS_TOOLTIP_USE_LINKSPEED);
+		m_oToolTip.AddTool (&m_cQuickPick, IDS_TOOLTIP_QUICKPICK);
 		m_oToolTip.AddTool (&m_cBuildPathFromSelection, IDS_TOOLTIP_COUNTERPATH);
 		m_oToolTip.AddTool (&m_cSelectPerfDescription, IDS_TOOLTIP_DESCRIPTION);
 		m_oToolTip.AddTool (&m_cSelectPerfObjects, IDS_TOOLTIP_OBJECTS);
@@ -549,6 +616,15 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cScaleMode.AddString (TEXT ("Peak"));
 	m_cScaleMode.AddString (TEXT ("Decay"));
 	m_cScaleMode.AddString (TEXT ("Auto"));
+
+	// Quick pick entries, see OnCbnSelchangeQuickPick
+	m_cQuickPick.AddString (TEXT ("Choose..."));
+	m_cQuickPick.AddString (TEXT ("Internet download speed"));
+	m_cQuickPick.AddString (TEXT ("Internet upload speed"));
+	m_cQuickPick.AddString (TEXT ("Disk activity"));
+	m_cQuickPick.AddString (TEXT ("Processor use"));
+	m_cQuickPick.AddString (TEXT ("Memory in use"));
+	m_cQuickPick.SetCurSel (0);
 
 	// Control value initialization
 	if (m_pMainFrame)

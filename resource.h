@@ -44,6 +44,7 @@
 #define IDS_TOOLTIP_ALERT               167
 #define IDR_POPUP_MENU2                 168
 #define IDS_TOOLTIP_USE_LINKSPEED       169
+#define IDS_TOOLTIP_QUICKPICK           170
 #define IDC_ABOUT_ICON1                 1000
 #define IDC_SYSLINK_URL1                1001
 #define IDC_SYSLINK_URL2                1002
@@ -105,6 +106,8 @@
 #define IDC_LABEL_ICONTYPE              1063
 #define IDC_LABEL_PREVIEW               1064
 #define IDC_WARN_TEXT4                  1065
+#define IDC_QUICKPICK_TEXT              1066
+#define IDC_COMBO_QUICKPICK             1067
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -117,9 +120,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        170
+#define _APS_NEXT_RESOURCE_VALUE        171
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1066
+#define _APS_NEXT_CONTROL_VALUE         1068
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

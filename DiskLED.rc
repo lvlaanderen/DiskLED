@@ -111,7 +111,7 @@ BEGIN
                     "SysLink",WS_TABSTOP,12,154,228,12
 END
 
-IDD_DIALOG_CONFIG DIALOGEX 0, 0, 420, 306
+IDD_DIALOG_CONFIG DIALOGEX 0, 0, 420, 326
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_CAPTION | WS_SYSMENU
 CAPTION "DiskLED Configuration"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -124,17 +124,19 @@ BEGIN
     COMBOBOX        IDC_COMBO_ICONTYPE,331,20,82,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
     LTEXT           "Preview:",IDC_LABEL_PREVIEW,331,40,82,8
     CONTROL         "",IDC_PREVIEW,"Static",SS_OWNERDRAW,331,50,82,82,WS_EX_CLIENTEDGE
-    LTEXT           "&Object:",IDC_COUNTERPATH_TEXT2,7,52,40,8
-    COMBOBOX        IDC_PERF_OBJECTS,7,62,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Counter:",IDC_COUNTERPATH_TEXT3,7,80,40,8
-    COMBOBOX        IDC_PERF_COUNTERS,7,90,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Instance:",IDC_COUNTERPATH_TEXT4,7,108,40,8
-    COMBOBOX        IDC_PERF_INSTANCES,7,118,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Description:",IDC_COUNTERPATH_TEXT5,7,136,50,8
-    EDITTEXT        IDC_PERF_DESCRIPTION,7,146,316,40,ES_MULTILINE | ES_READONLY | WS_VSCROLL
-    PUSHBUTTON      "Build path from &selection",IDC_USE_SELECTED_DATA_SOURCE,7,192,112,14
-    LTEXT           "&Performance counter path used as data source:",IDC_COUNTERPATH_TEXT,7,212,200,8
-    EDITTEXT        IDC_COUNTERPATH_EDIT,7,222,316,12,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Quick pick:",IDC_QUICKPICK_TEXT,7,52,45,8
+    COMBOBOX        IDC_COMBO_QUICKPICK,55,50,200,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Object:",IDC_COUNTERPATH_TEXT2,7,72,40,8
+    COMBOBOX        IDC_PERF_OBJECTS,7,82,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Counter:",IDC_COUNTERPATH_TEXT3,7,100,40,8
+    COMBOBOX        IDC_PERF_COUNTERS,7,110,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Instance:",IDC_COUNTERPATH_TEXT4,7,128,40,8
+    COMBOBOX        IDC_PERF_INSTANCES,7,138,316,12,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Description:",IDC_COUNTERPATH_TEXT5,7,156,50,8
+    EDITTEXT        IDC_PERF_DESCRIPTION,7,166,316,40,ES_MULTILINE | ES_READONLY | WS_VSCROLL
+    PUSHBUTTON      "Build path from &selection",IDC_USE_SELECTED_DATA_SOURCE,7,212,112,14
+    LTEXT           "&Performance counter path used as data source:",IDC_COUNTERPATH_TEXT,7,232,200,8
+    EDITTEXT        IDC_COUNTERPATH_EDIT,7,242,316,12,ES_AUTOHSCROLL | ES_READONLY
     LTEXT           "Which counter value is a full icon (100%)? Use 100 for percent counters. With the Auto scale below, DiskLED learns the maximum itself and this is only the minimum.",IDC_100PERCENT_TEXT,7,52,316,26
     LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,84,60,8
     EDITTEXT        IDC_100PERCENT_EDIT,75,82,70,12,ES_RIGHT | ES_AUTOHSCROLL
@@ -164,14 +166,14 @@ BEGIN
     LTEXT           "% of the scale, for",IDC_WARN_TEXT2,75,86,64,8
     EDITTEXT        IDC_EDIT_ALERT_SECONDS,142,83,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "s  (0% = no warning)",IDC_WARN_TEXT3,167,86,100,8
-    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,7,244,406,1
-    CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,252,120,10
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,7,264,406,1
+    CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,272,120,10
     CONTROL         "&Update the INI file when applying settings",IDC_UPDATE_INI,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,266,200,10
-    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,284,65,14
-    DEFPUSHBUTTON   "OK",IDOK,249,284,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,306,284,50,14
-    PUSHBUTTON      "&Apply",IDC_APPLY,363,284,50,14
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,286,200,10
+    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,304,65,14
+    DEFPUSHBUTTON   "OK",IDOK,249,304,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,306,304,50,14
+    PUSHBUTTON      "&Apply",IDC_APPLY,363,304,50,14
 END
 
 
@@ -334,6 +336,7 @@ BEGIN
     IDS_TOOLTIP_INSTANCES   "Select a performance counter instance"
     IDS_TOOLTIP_USE_LINKSPEED 
                             "Use the speed of the network adapter as the 100% value (Fixed scale). This is the speed of the adapter, not of your internet connection, which is often lower."
+    IDS_TOOLTIP_QUICKPICK   "Choose a common data source. DiskLED fills in the counter, the value format and the scale for you. You can change everything afterwards, or pick any counter with the lists below."
 END
 
 #endif    // English (U.S.) resources
