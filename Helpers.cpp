@@ -456,6 +456,53 @@ CString EnglishPathToLocal (const CString& sPath)
 }
 
 
+// The speed of the network adapter behind a Bytes counter of the Network Interface object, in bytes/s
+BOOL GetNetworkLinkSpeed (const CString& sEnglishPath, double& dBytesPerSec)
+{
+	CString			sMachine;
+	CString			sObject;
+	CString			sInstance;
+	CString			sCounter;
+	PDH_HQUERY		hQuery		= NULL;
+	PDH_HCOUNTER	hCounter	= NULL;
+	BOOL			bResult		= FALSE;
+
+	dBytesPerSec	= 0;
+
+	if (!ParsePerfPath (sEnglishPath, sMachine, sObject, sInstance, sCounter))
+	{
+		return FALSE;
+	}
+	if (sObject.CompareNoCase (TEXT ("Network Interface")) != 0 || sInstance.IsEmpty () || sInstance == TEXT ("*") || sCounter.Left (5).CompareNoCase (TEXT ("Bytes")) != 0)
+	{
+		return FALSE;
+	}
+
+	if (PdhOpenQuery (NULL, 0, &hQuery) == ERROR_SUCCESS)
+	{
+		if (PdhAddEnglishCounter (hQuery, MakePerfPath (sMachine, sObject, sInstance, TEXT ("Current Bandwidth")), 0, &hCounter) == ERROR_SUCCESS
+			&& PdhCollectQueryData (hQuery) == ERROR_SUCCESS)
+		{
+			PDH_FMT_COUNTERVALUE	oValue;
+
+			if (PdhGetFormattedCounterValue (hCounter, PDH_FMT_DOUBLE, NULL, &oValue) == ERROR_SUCCESS && oValue.doubleValue > 0)
+			{
+				// Bits per second. Both directions together can carry twice that.
+				dBytesPerSec	= oValue.doubleValue / 8.0;
+				if (sCounter.CompareNoCase (TEXT ("Bytes Total/sec")) == 0)
+				{
+					dBytesPerSec	*= 2.0;
+				}
+				bResult			= TRUE;
+			}
+		}
+		PdhCloseQuery (hQuery);
+	}
+
+	return bResult;
+}
+
+
 //////////////////////////////////////////////////////////////////////
 //
 //      Autostart: a per-user Run entry for this copy of the executable

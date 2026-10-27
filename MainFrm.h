@@ -33,6 +33,9 @@ struct CounterRuntime
 	PDH_HCOUNTER	hCounter;
 	double			dDecayPeak;			// Decaying peak of the values
 	DWORD			nLastTick;			// Tick count of the previous update, 0 = none yet
+	double			dLearned;			// Learned maximum of the values (auto scale)
+	double			dLearnedSaved;		// The learned maximum as last written to the INI file
+	double			dCeiling;			// Highest possible value (network adapter speed), 0 = unknown
 	BOOL			bAbove;				// The value is above the alert threshold
 	DWORD			nAboveSince;		// Tick count when it went above
 	BOOL			bBelow;				// The value has dropped below the threshold while the alert period was running
@@ -90,6 +93,7 @@ private:
 	BOOL					m_bPdhError;					// The counters could not be read, reconnecting every PDH_RETRY_MS
 	BOOL					m_bErrorShown;					// The error was already reported with a balloon
 	DWORD					m_nRetryTick;					// Tick count of the last (re)connection attempt
+	DWORD					m_nLastLearnSaveTick;			// Tick count of the last check whether the learned maximum needs saving
 	int						m_nBadSamples;					// Consecutive samples that could not be used
 	DWORD					m_nZeroSince;					// Tick count since when all counters read zero, 0 = not all zero
 	CString					m_sLastError;
@@ -114,6 +118,7 @@ private:
 	void					HandlePdhError (const CString& sCaller, DWORD nError);
 	void					SkipSample ();
 	void					Reconnect ();
+	void					SaveLearnedMax (BOOL bForce);
 	void					CheckAlert (int nCounter);
 
 

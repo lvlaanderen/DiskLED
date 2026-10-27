@@ -266,6 +266,131 @@ CString FormatValue (DWORD nValueFormat, double dValue, double dScale, BOOL bSho
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	The 100% value as shown in and read from the configuration dialog
+//
+////////////////////////////////////////////////////////////////////////////////
+
+CString FormatScaleValue (DWORD nValueFormat, double dValue)
+{
+	CString	sResult;
+
+	if (nValueFormat == VALUEFORMAT_BYTES || nValueFormat == VALUEFORMAT_BITS || nValueFormat == VALUEFORMAT_MBYTES)
+	{
+		CString	sUnit;
+		CString	sIconUnit;
+		double	dNumber	= 0;
+
+		GetValueParts (nValueFormat, dValue, dValue, dNumber, sUnit, sIconUnit);
+		sResult.Format (TEXT ("%.4g %s"), dNumber, (LPCTSTR) sUnit);
+	}
+	else
+	{
+		sResult.Format (TEXT ("%.15g"), dValue);
+	}
+
+	return sResult;
+}
+
+// Factor from the unit (e.g. "Mbit/s", "MB/s", "kbps") to bytes/s
+static BOOL GetRateUnitFactor (CString sUnit, double& dFactor)
+{
+	int		nPower	= 0;
+
+	if (sUnit.Right (2).CompareNoCase (TEXT ("/s")) == 0 || sUnit.Right (2).CompareNoCase (TEXT ("ps")) == 0)
+	{
+		sUnit	= sUnit.Left (sUnit.GetLength () - 2);
+	}
+	sUnit.Trim ();
+
+	// A prefix: kilo, mega or giga
+	if (sUnit.GetLength () >= 2)
+	{
+		TCHAR	c	= (TCHAR) _totlower (sUnit[0]);
+
+		nPower	= (c == 'k') ? 1 : (c == 'm') ? 2 : (c == 'g') ? 3 : 0;
+		if (nPower > 0)
+		{
+			sUnit	= sUnit.Mid (1);
+		}
+	}
+
+	if (sUnit == TEXT ("B") || sUnit == TEXT ("iB"))
+	{
+		dFactor	= pow (1024.0, nPower);
+		return TRUE;
+	}
+	if (sUnit.CompareNoCase (TEXT ("b")) == 0 || sUnit.CompareNoCase (TEXT ("bit")) == 0 || sUnit.CompareNoCase (TEXT ("bits")) == 0)
+	{
+		dFactor	= pow (1000.0, nPower) / 8.0;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+BOOL ParseScaleValue (DWORD nValueFormat, const CString& sText, double& dValue)
+{
+	CString	sTrimmed	= sText;
+	TCHAR*	pEnd		= NULL;
+
+	sTrimmed.Trim ();
+	if (sTrimmed.IsEmpty ())
+	{
+		return FALSE;
+	}
+
+	double	dNumber		= _tcstod (sTrimmed, &pEnd);
+	if (pEnd == (LPCTSTR) sTrimmed || !_finite (dNumber))
+	{
+		return FALSE;
+	}
+
+	CString	sUnit		= pEnd;
+	double	dFactor		= 1;
+
+	sUnit.Trim ();
+	if (!sUnit.IsEmpty ())
+	{
+		if (nValueFormat == VALUEFORMAT_BYTES || nValueFormat == VALUEFORMAT_BITS)
+		{
+			if (!GetRateUnitFactor (sUnit, dFactor))
+			{
+				return FALSE;
+			}
+		}
+		else if (nValueFormat == VALUEFORMAT_MBYTES)
+		{
+			if (sUnit.CompareNoCase (TEXT ("MB")) == 0 || sUnit.CompareNoCase (TEXT ("MiB")) == 0)
+			{
+				dFactor	= 1;
+			}
+			else if (sUnit.CompareNoCase (TEXT ("GB")) == 0 || sUnit.CompareNoCase (TEXT ("GiB")) == 0)
+			{
+				dFactor	= 1024.0;
+			}
+			else if (sUnit.CompareNoCase (TEXT ("TB")) == 0 || sUnit.CompareNoCase (TEXT ("TiB")) == 0)
+			{
+				dFactor	= 1024.0 * 1024.0;
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		else
+		{
+			return FALSE;
+		}
+	}
+
+	dValue	= dNumber * dFactor;
+
+	return TRUE;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Where each counter is drawn: one counter fills the icon. Two counters share it, side by side
 //	for the bar types and one above the other for the graph. (The number gets an icon per counter.)
 //

@@ -11,5 +11,8 @@ BOOL	ParsePerfPath (const CString& sPath, CString& sMachine, CString& sObject, C
 CString	MakePerfPath (const CString& sMachine, const CString& sObject, const CString& sInstance, const CString& sCounter);
 CString	LocalPathToEnglish (const CString& sPath);
 CString	EnglishPathToLocal (const CString& sPath);
+
+// The speed of the network adapter of a \Network Interface(<instance>)\Bytes ... counter (an English path), in bytes/s. Not the speed of the internet connection!
+BOOL	GetNetworkLinkSpeed (const CString& sEnglishPath, double& dBytesPerSec);
 DWORD	GetFileAttributesAPIWrapper (CString sPath, DWORD* nAttributes);
 BOOL	Split (CString sDelimiter, CString sInput, CStringArray* asOutput);

@@ -47,6 +47,8 @@ private:
 	CStatic		m_cUpdateFrequencyText2;
 	CEdit		m_cUpdateFrequencyEdit;
 	CEdit		m_c100Percent;
+	CStatic		m_cLinkSpeedText;
+	CButton		m_cUseLinkSpeed;
 	CEdit		m_cCounterPath;
 	CButton		m_cUpdateINI;
 	CButton		m_cDefaultValues;
@@ -72,7 +74,10 @@ private:
 	int			m_nThresholdHigh;
 	DWORD		m_nUpdateFrequency;
 	int			m_nUpdateINI;
-	double		m_d100Percent;
+	double		m_d100Percent;			// The 100% value, in counter units
+	CString		m_s100Percent;			// ... as shown in the edit box, with a unit (e.g. "350 Mbit/s")
+	CString		m_s100PercentShown;		// The text last generated from m_d100Percent. If the edit box still has it, m_d100Percent is exact.
+	double		m_dLinkSpeed;			// Speed of the network adapter of the selected counter in bytes/s, 0 = not a network counter
 	CString		m_sCounterPath;			// In the system language
 	CString		m_sPerfObject;
 	CString		m_sPerfCounter;
@@ -115,6 +120,11 @@ private:
 	void		SaveControlsToCounter (int nCounter);
 	void		UpdateSwatches ();
 	void		UpdatePreview ();
+	BOOL		Read100Percent ();
+	void		UpdateScaleLabel ();
+	void		UpdateLinkSpeedHint ();
+	void		RefreshScaleControls ();
+	void		ApplyCounterDefaults ();
 	void		InitPerfBrowser ();
 	void		SelectPathInBrowser ();
 	DWORD		SplitPerfPath (CString sCounterPath, CString& sObject, CString& sCounter, CString& sInstance);
@@ -131,6 +141,9 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnCbnSelchangeCounterSel();
+	afx_msg void OnCbnSelchangeValueFormat();
+	afx_msg void OnCbnSelchangeScaleMode();
+	afx_msg void OnBnClickedUseLinkSpeed();
 	afx_msg void OnCbnSelchangePerfObjects();
 	afx_msg void OnBnClickedUseSelectedDataSource();
 	afx_msg void OnCbnSelchangePerfCounters();

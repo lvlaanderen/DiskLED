@@ -40,6 +40,7 @@ static const NameValue g_aScaleModes[] =
 	{ SCALEMODE_FIXED_TEXT,		SCALEMODE_FIXED },
 	{ SCALEMODE_PEAK_TEXT,		SCALEMODE_PEAK },
 	{ SCALEMODE_DECAY_TEXT,		SCALEMODE_DECAY },
+	{ SCALEMODE_AUTO_TEXT,		SCALEMODE_AUTO },
 	{ NULL,						0 }
 };
 
@@ -119,9 +120,77 @@ void SetDefaultCounterSettings (CounterSettings& oCounter)
 	oCounter.d100Percent	= DEFAULT_100PERCENT;
 	oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
 	oCounter.nScaleMode		= SCALEMODE_FIXED;
+	oCounter.dLearnedMax	= 0;
 	oCounter.bInvert		= FALSE;
 	oCounter.nAlertPercent	= 0;
 	oCounter.nAlertSeconds	= DEFAULT_ALERT_SECONDS;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Sensible value format, scale mode and 100% value for a counter, so users do not have to know them
+//	The alert settings and the path are left alone
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
+{
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	// Unknown counters: a plain number that learns its maximum
+	oCounter.bInvert		= FALSE;
+	oCounter.dLearnedMax	= 0;
+	oCounter.nValueFormat	= VALUEFORMAT_NUMBER;
+	oCounter.nScaleMode		= SCALEMODE_AUTO;
+	oCounter.d100Percent	= 1;
+
+	if (!ParsePerfPath (sEnglishPath, sMachine, sObject, sInstance, sCounter))
+	{
+		return;
+	}
+	sObject.MakeLower ();
+	sCounter.MakeLower ();
+
+	if (sCounter.Find (TEXT ("%")) >= 0)
+	{
+		// Percentages: 100 is a full icon
+		oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
+		oCounter.nScaleMode		= SCALEMODE_FIXED;
+		oCounter.d100Percent	= 100;
+	}
+	else if (sObject == TEXT ("network interface") && sCounter.Left (5) == TEXT ("bytes"))
+	{
+		// Network speed: the adapter speed is not the internet speed, so learn the maximum. The minimum is 1 Mbit/s.
+		oCounter.nValueFormat	= VALUEFORMAT_BITS;
+		oCounter.d100Percent	= 125000;
+	}
+	else if (sCounter.Find (TEXT ("mbytes")) >= 0)
+	{
+		oCounter.nValueFormat	= VALUEFORMAT_MBYTES;
+		if (sObject == TEXT ("memory"))
+		{
+			// Memory: the installed memory is a full icon
+			MEMORYSTATUSEX	oMemory;
+
+			SecureZeroMemory (&oMemory, sizeof (oMemory));
+			oMemory.dwLength	= sizeof (oMemory);
+			if (GlobalMemoryStatusEx (&oMemory) && oMemory.ullTotalPhys > 0)
+			{
+				oCounter.nScaleMode		= SCALEMODE_FIXED;
+				oCounter.d100Percent	= (double) (oMemory.ullTotalPhys / (1024 * 1024));
+			}
+		}
+	}
+	else if (sCounter.Find (TEXT ("bytes/sec")) >= 0)
+	{
+		// Disk and other throughput: the minimum is 1 MB/s
+		oCounter.nValueFormat	= VALUEFORMAT_BYTES;
+		oCounter.d100Percent	= 1048576;
+	}
 }
 
 void SetDefaultSettings (DiskLEDSettings& oSettings)
@@ -192,9 +261,13 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 		{
 			oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
 		}
-		if (oCounter.nScaleMode < SCALEMODE_FIXED || oCounter.nScaleMode > SCALEMODE_DECAY)
+		if (oCounter.nScaleMode < SCALEMODE_FIXED || oCounter.nScaleMode > SCALEMODE_AUTO)
 		{
 			oCounter.nScaleMode		= SCALEMODE_FIXED;
+		}
+		if (!(oCounter.dLearnedMax >= 0.0) || !_finite (oCounter.dLearnedMax) || oCounter.dLearnedMax > MAX_100PERCENT)
+		{
+			oCounter.dLearnedMax	= 0;
 		}
 		if (oCounter.nAlertPercent < 0)
 		{
@@ -253,6 +326,10 @@ static void LoadCounterSettings (const CString& sINIFile, const CString& sSectio
 	if (ReadINIValue (sINIFile, sSection, INI_VALUE_SCALEMODE, &sData) == ERROR_SUCCESS)
 	{
 		oCounter.nScaleMode	= LookupValue (g_aScaleModes, sData, oCounter.nScaleMode);
+	}
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_LEARNEDMAX, &sData) == ERROR_SUCCESS)
+	{
+		oCounter.dLearnedMax	= _tstof (sData);
 	}
 
 	if (ReadINIValue (sINIFile, sSection, INI_VALUE_INVERT, &sData) == ERROR_SUCCESS)
@@ -342,6 +419,10 @@ static DWORD SaveCounterSettings (const CString& sINIFile, const CString& sSecti
 	if (nError == ERROR_SUCCESS)
 	{
 		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_SCALEMODE, CString (LookupName (g_aScaleModes, oCounter.nScaleMode)));
+	}
+	if (nError == ERROR_SUCCESS && oCounter.nScaleMode == SCALEMODE_AUTO)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_LEARNEDMAX, (double) oCounter.dLearnedMax);
 	}
 	if (nError == ERROR_SUCCESS)
 	{

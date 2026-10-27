@@ -111,7 +111,7 @@ BEGIN
                     "SysLink",WS_TABSTOP,12,154,228,12
 END
 
-IDD_DIALOG_CONFIG DIALOGEX 0, 0, 345, 418
+IDD_DIALOG_CONFIG DIALOGEX 0, 0, 345, 434
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_CAPTION | WS_SYSMENU
 CAPTION "DiskLED Configuration"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -131,43 +131,45 @@ BEGIN
     PUSHBUTTON      "Build path from &selection",IDC_USE_SELECTED_DATA_SOURCE,17,181,112,14
     LTEXT           "&Performance counter path used as data source:",IDC_COUNTERPATH_TEXT,7,211,154,8
     EDITTEXT        IDC_COUNTERPATH_EDIT,7,221,226,12,ES_AUTOHSCROLL | ES_READONLY
-    LTEXT           "In order to be able to calculate system activity, DiskLED needs to know which value from the performance counter path shown above is equivalent to 100% utilization.",IDC_100PERCENT_TEXT,7,240,226,26
-    LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,269,55,8
-    EDITTEXT        IDC_100PERCENT_EDIT,75,267,50,12,ES_RIGHT | ES_AUTOHSCROLL
-    LTEXT           "How often should DiskLED get new performance data and update its icon? Enter a value in milliseconds for the interval between consecutive updates.",IDC_100PERCENT_TEXT3,7,283,226,26
-    LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,312,62,8
-    EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,310,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "ms",IDC_UPDATEFREQUENCY_TEXT2,107,312,10,8
+    LTEXT           "Which counter value is a full icon (100%)? Use 100 for percent counters. With the Auto scale below, DiskLED learns the maximum itself and this is only the minimum.",IDC_100PERCENT_TEXT,7,240,226,26
+    LTEXT           "&100% utilization:",IDC_100PERCENT_TEXT2,7,269,60,8
+    EDITTEXT        IDC_100PERCENT_EDIT,75,267,70,12,ES_RIGHT | ES_AUTOHSCROLL
+    LTEXT           "",IDC_LINKSPEED_TEXT,7,285,170,8
+    PUSHBUTTON      "&Use",IDC_USE_LINKSPEED,183,281,50,14
+    LTEXT           "How often should DiskLED get new performance data and update its icon? Enter a value in milliseconds for the interval between consecutive updates.",IDC_100PERCENT_TEXT3,7,299,226,26
+    LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,328,62,8
+    EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,326,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "ms",IDC_UPDATEFREQUENCY_TEXT2,107,328,10,8
     GROUPBOX        "Icon type:",IDC_GROUP_LEDTYPE,257,211,78,34
     COMBOBOX        IDC_COMBO_ICONTYPE,264,225,64,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
-    GROUPBOX        "Preview:",IDC_STATIC,257,248,78,76
-    CONTROL         "",IDC_PREVIEW,"Static",SS_OWNERDRAW,262,258,68,62
-    LTEXT           "Value for&mat:",IDC_VALUEFORMAT_TEXT,7,334,50,8,WS_GROUP
-    COMBOBOX        IDC_COMBO_VALUEFORMAT,60,332,60,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Scal&e:",IDC_STATIC,126,334,24,8
-    COMBOBOX        IDC_COMBO_SCALEMODE,152,332,50,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "In&vert",IDC_CHECK_INVERT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,208,333,48,10
-    LTEXT           "Wa&rn above",IDC_STATIC,7,350,40,8
-    EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "% of the 100% value, for",IDC_STATIC,75,350,84,8
-    EDITTEXT        IDC_EDIT_ALERT_SECONDS,160,347,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "s  (0% = no warning)",IDC_STATIC,185,350,100,8
-    LTEXT           "Colours:",IDC_STATIC,7,367,34,8
-    CONTROL         "",IDC_COLOR_LOW,"Button",BS_OWNERDRAW | WS_TABSTOP,45,364,24,13
-    CONTROL         "",IDC_COLOR_MID,"Button",BS_OWNERDRAW | WS_TABSTOP,73,364,24,13
-    CONTROL         "",IDC_COLOR_HIGH,"Button",BS_OWNERDRAW | WS_TABSTOP,101,364,24,13
-    LTEXT           "Mid from",IDC_STATIC,135,367,32,8
-    EDITTEXT        IDC_EDIT_THRESHOLD_MID,168,364,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "%, high from",IDC_STATIC,192,367,48,8
-    EDITTEXT        IDC_EDIT_THRESHOLD_HIGH,242,364,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "%",IDC_STATIC,266,367,8,8
-    CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,382,120,10
+    GROUPBOX        "Preview:",IDC_STATIC,257,248,78,92
+    CONTROL         "",IDC_PREVIEW,"Static",SS_OWNERDRAW,262,258,68,78
+    LTEXT           "Value for&mat:",IDC_VALUEFORMAT_TEXT,7,350,50,8,WS_GROUP
+    COMBOBOX        IDC_COMBO_VALUEFORMAT,60,348,60,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Scal&e:",IDC_STATIC,126,350,24,8
+    COMBOBOX        IDC_COMBO_SCALEMODE,152,348,50,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "In&vert",IDC_CHECK_INVERT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,208,349,48,10
+    LTEXT           "Wa&rn above",IDC_STATIC,7,366,40,8
+    EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,363,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "% of the 100% value, for",IDC_STATIC,75,366,84,8
+    EDITTEXT        IDC_EDIT_ALERT_SECONDS,160,363,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "s  (0% = no warning)",IDC_STATIC,185,366,100,8
+    LTEXT           "Colours:",IDC_STATIC,7,383,34,8
+    CONTROL         "",IDC_COLOR_LOW,"Button",BS_OWNERDRAW | WS_TABSTOP,45,380,24,13
+    CONTROL         "",IDC_COLOR_MID,"Button",BS_OWNERDRAW | WS_TABSTOP,73,380,24,13
+    CONTROL         "",IDC_COLOR_HIGH,"Button",BS_OWNERDRAW | WS_TABSTOP,101,380,24,13
+    LTEXT           "Mid from",IDC_STATIC,135,383,32,8
+    EDITTEXT        IDC_EDIT_THRESHOLD_MID,168,380,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "%, high from",IDC_STATIC,192,383,48,8
+    EDITTEXT        IDC_EDIT_THRESHOLD_HIGH,242,380,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "%",IDC_STATIC,266,383,8,8
+    CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,398,120,10
     CONTROL         "&Update the INI file when applying settings",IDC_UPDATE_INI,
-                    "Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,184,382,151,10
-    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,396,65,14
-    DEFPUSHBUTTON   "OK",IDOK,170,396,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,228,396,50,14
-    PUSHBUTTON      "&Apply",IDC_APPLY,285,396,50,14
+                    "Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,184,398,151,10
+    PUSHBUTTON      "&Default values",IDC_DEFAULTVALUES,7,412,65,14
+    DEFPUSHBUTTON   "OK",IDOK,170,412,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,228,412,50,14
+    PUSHBUTTON      "&Apply",IDC_APPLY,285,412,50,14
 END
 
 
@@ -316,18 +318,20 @@ BEGIN
     IDS_TOOLTIP_VALUEFORMAT "How to show the current value in the icon's tooltip. Use Bytes/s or Bits/s for counters measured in bytes per second, MBytes for counters measured in megabytes."
     IDS_TOOLTIP_UPDATE_FREQUENCY 
                             "How often to update the display (in milliseconds)"
-    IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). With Peak and Decay the 100% value is the minimum."
+    IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). Auto: the highest value DiskLED has seen, remembered in the INI file and falling very slowly (halves in a day). With Peak, Decay and Auto the 100% value is the minimum."
     IDS_TOOLTIP_COUNTERSEL  "Which counter the settings below belong to. With a second counter, each counter has its own data source, 100% value, format, scale and warning."
     IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for the graph. The number icon gets a second tray icon instead."
     IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the 100% value for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_UPDATE_INI  "Update the INI configuration file when applying settings?"
     IDS_TOOLTIP_DEFAULT_VALUES "Restore default values?"
-    IDS_TOOLTIP_100PERCENT  "Which performance counter value corresponds to 100% utilization?"
+    IDS_TOOLTIP_100PERCENT  "The counter value that is a full icon. You can type a plain number (the raw counter value) or a value with a unit, e.g. 350 Mbit/s or 50 MB/s for network and disk speeds. With the Peak, Decay and Auto scale this is only the minimum."
     IDS_TOOLTIP_COUNTERPATH "From the selection above, build a performance counter path"
     IDS_TOOLTIP_DESCRIPTION "Description of the selected counter"
     IDS_TOOLTIP_OBJECTS     "Select a performance object"
     IDS_TOOLTIP_COUNTERS    "Select a performance object's counter"
     IDS_TOOLTIP_INSTANCES   "Select a performance counter instance"
+    IDS_TOOLTIP_USE_LINKSPEED 
+                            "Use the speed of the network adapter as the 100% value (Fixed scale). This is the speed of the adapter, not of your internet connection, which is often lower."
 END
 
 #endif    // English (U.S.) resources

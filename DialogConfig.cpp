@@ -21,6 +21,7 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_nThresholdMid(0), m_nThresholdHigh(0)
 														, m_nUpdateINI(0)
 														, m_d100Percent(0)
+														, m_dLinkSpeed(0)
 														, m_sCounterPath(_T(""))
 														, m_sPerfObject(_T(""))
 														, m_sPerfCounter(_T(""))
@@ -110,10 +111,12 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_UPDATE_INI, m_cUpdateINI);
 	DDX_Control(pDX, IDC_DEFAULTVALUES, m_cDefaultValues);
 	DDX_Control(pDX, IDC_100PERCENT_EDIT, m_c100Percent);
+	DDX_Control(pDX, IDC_LINKSPEED_TEXT, m_cLinkSpeedText);
+	DDX_Control(pDX, IDC_USE_LINKSPEED, m_cUseLinkSpeed);
 	DDX_Control(pDX, IDC_COUNTERPATH_EDIT, m_cCounterPath);
 
 	DDX_Text(pDX, IDC_UPDATEFREQUENCY_EDIT, m_nUpdateFrequency);
-	DDX_Text(pDX, IDC_100PERCENT_EDIT, m_d100Percent);
+	DDX_Text(pDX, IDC_100PERCENT_EDIT, m_s100Percent);
 	DDX_Check (pDX, IDC_UPDATE_INI, m_nUpdateINI);
 	DDX_Text(pDX, IDC_COUNTERPATH_EDIT, m_sCounterPath);
 	DDX_Control(pDX, IDC_PERF_OBJECTS, m_cSelectPerfObjects);
@@ -145,11 +148,14 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_BN_CLICKED(IDCANCEL, &CDialogConfig::OnBnClickedCancel)
 	ON_BN_CLICKED(IDC_APPLY, &CDialogConfig::OnBnClickedApply)
 	ON_BN_CLICKED(IDC_USE_SELECTED_DATA_SOURCE, &CDialogConfig::OnBnClickedUseSelectedDataSource)
+	ON_BN_CLICKED(IDC_USE_LINKSPEED, &CDialogConfig::OnBnClickedUseLinkSpeed)
 	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
 	ON_WM_DRAWITEM()
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
 	ON_CBN_SELCHANGE(IDC_COMBO_COUNTERSEL, &CDialogConfig::OnCbnSelchangeCounterSel)
+	ON_CBN_SELCHANGE(IDC_COMBO_VALUEFORMAT, &CDialogConfig::OnCbnSelchangeValueFormat)
+	ON_CBN_SELCHANGE(IDC_COMBO_SCALEMODE, &CDialogConfig::OnCbnSelchangeScaleMode)
 	ON_CBN_SELCHANGE(IDC_PERF_OBJECTS, &CDialogConfig::OnCbnSelchangePerfObjects)
 	ON_CBN_SELCHANGE(IDC_PERF_COUNTERS, &CDialogConfig::OnCbnSelchangePerfCounters)
 	ON_CBN_SELCHANGE(IDC_PERF_INSTANCES, &CDialogConfig::OnCbnSelchangePerfInstances)
@@ -195,6 +201,8 @@ void CDialogConfig::LoadCounterToControls (int nCounter)
 
 	m_sCounterPath		= EnglishPathToLocal (oCounter.sPath);
 	m_d100Percent		= oCounter.d100Percent;
+	m_s100Percent		= FormatScaleValue (oCounter.nValueFormat, oCounter.d100Percent);
+	m_s100PercentShown	= m_s100Percent;
 	m_nValueFormat		= oCounter.nValueFormat - 1;
 	m_nScaleMode		= oCounter.nScaleMode - 1;
 	m_nInvert			= oCounter.bInvert ? 1 : 0;
@@ -221,6 +229,167 @@ void CDialogConfig::UpdateSwatches ()
 	{
 		m_cColor[i].Invalidate ();
 	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The 100% value: the text is converted to a number when it was edited. Returns FALSE (after telling the user) if it is not valid.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+BOOL CDialogConfig::Read100Percent ()
+{
+	double	dValue	= 0;
+
+	// Not edited: the exact value is still in m_d100Percent
+	if (m_s100Percent == m_s100PercentShown)
+	{
+		return TRUE;
+	}
+
+	if (!ParseScaleValue (m_nValueFormat + 1, m_s100Percent, dValue) || !(dValue > 0.0) || dValue > MAX_100PERCENT)
+	{
+		MessageBox (TEXT ("The 100% value is not valid. Enter a number greater than 0, optionally with a unit such as Mbit/s or MB/s."), TEXT ("DiskLED: 100% value"), MB_OK | MB_ICONEXCLAMATION);
+		m_c100Percent.SetFocus ();
+		return FALSE;
+	}
+
+	m_d100Percent		= dValue;
+	m_s100PercentShown	= m_s100Percent;
+
+	return TRUE;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The label of the 100% field depends on the scale: with Peak, Decay and Auto the value is only the minimum
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::UpdateScaleLabel ()
+{
+	int	nMode	= m_cScaleMode.GetCurSel () + 1;
+
+	SetDlgItemText (IDC_100PERCENT_TEXT2, (nMode == SCALEMODE_FIXED) ? TEXT ("&100% utilization:") : TEXT ("&Minimum scale:"));
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	For network counters: show the speed of the adapter and offer to use it as the 100% value
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::UpdateLinkSpeedHint ()
+{
+	CString	sPath	= m_sCounterPath.IsEmpty () ? m_sCounterPath : LocalPathToEnglish (m_sCounterPath);
+
+	m_dLinkSpeed	= 0;
+	if (!sPath.IsEmpty () && GetNetworkLinkSpeed (sPath, m_dLinkSpeed))
+	{
+		m_cLinkSpeedText.SetWindowText (TEXT ("Adapter speed: ") + FormatScaleValue (VALUEFORMAT_BITS, m_dLinkSpeed));
+		m_cLinkSpeedText.ShowWindow (SW_SHOW);
+		m_cUseLinkSpeed.ShowWindow (SW_SHOW);
+	}
+	else
+	{
+		m_dLinkSpeed	= 0;
+		m_cLinkSpeedText.ShowWindow (SW_HIDE);
+		m_cUseLinkSpeed.ShowWindow (SW_HIDE);
+	}
+}
+
+void CDialogConfig::RefreshScaleControls ()
+{
+	UpdateScaleLabel ();
+	UpdateLinkSpeedHint ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	A new data source was chosen: fill in a sensible value format, scale and 100% value. All can be changed afterwards.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::ApplyCounterDefaults ()
+{
+	CounterSettings	oCounter	= m_oSettings.aCounters[m_nCounterSel];
+
+	GetCounterDefaults (LocalPathToEnglish (m_sCounterPath), oCounter);
+
+	m_nValueFormat		= oCounter.nValueFormat - 1;
+	m_nScaleMode		= oCounter.nScaleMode - 1;
+	m_nInvert			= 0;
+	m_d100Percent		= oCounter.d100Percent;
+	m_s100Percent		= FormatScaleValue (oCounter.nValueFormat, oCounter.d100Percent);
+	m_s100PercentShown	= m_s100Percent;
+
+	// What was learned belongs to the previous data source
+	m_oSettings.aCounters[m_nCounterSel].dLearnedMax	= 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The value format changed: show the 100% value in the units of the new format
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnCbnSelchangeValueFormat ()
+{
+	CString	sText;
+	double	dValue	= m_d100Percent;
+	int		nNew	= m_cValueFormat.GetCurSel ();
+
+	// m_nValueFormat is still the previous format: the text is in its units
+	m_c100Percent.GetWindowText (sText);
+	if (sText != m_s100PercentShown && ParseScaleValue (m_nValueFormat + 1, sText, dValue) && dValue > 0.0 && dValue <= MAX_100PERCENT)
+	{
+		m_d100Percent	= dValue;
+	}
+
+	if (nNew >= 0)
+	{
+		m_nValueFormat		= nNew;
+		m_s100Percent		= FormatScaleValue (nNew + 1, m_d100Percent);
+		m_s100PercentShown	= m_s100Percent;
+		m_c100Percent.SetWindowText (m_s100Percent);
+	}
+
+	UpdatePreview ();
+}
+
+void CDialogConfig::OnCbnSelchangeScaleMode ()
+{
+	UpdateScaleLabel ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Use the adapter speed as the 100% value
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnBnClickedUseLinkSpeed ()
+{
+	int	nFormat	= m_cValueFormat.GetCurSel () + 1;
+
+	if (!(m_dLinkSpeed > 0.0) || nFormat < VALUEFORMAT_PERCENT)
+	{
+		return;
+	}
+
+	m_cScaleMode.SetCurSel (SCALEMODE_FIXED - 1);
+	m_nScaleMode		= SCALEMODE_FIXED - 1;
+	m_d100Percent		= m_dLinkSpeed;
+	m_s100Percent		= FormatScaleValue (nFormat, m_d100Percent);
+	m_s100PercentShown	= m_s100Percent;
+	m_c100Percent.SetWindowText (m_s100Percent);
+	UpdateScaleLabel ();
 }
 
 
@@ -257,6 +426,7 @@ BOOL CDialogConfig::OnInitDialog ()
 		m_oToolTip.AddTool (&m_cUpdateINI, IDS_TOOLTIP_UPDATE_INI);
 		m_oToolTip.AddTool (&m_cDefaultValues, IDS_TOOLTIP_DEFAULT_VALUES);
 		m_oToolTip.AddTool (&m_c100Percent, IDS_TOOLTIP_100PERCENT);
+		m_oToolTip.AddTool (&m_cUseLinkSpeed, IDS_TOOLTIP_USE_LINKSPEED);
 		m_oToolTip.AddTool (&m_cBuildPathFromSelection, IDS_TOOLTIP_COUNTERPATH);
 		m_oToolTip.AddTool (&m_cSelectPerfDescription, IDS_TOOLTIP_DESCRIPTION);
 		m_oToolTip.AddTool (&m_cSelectPerfObjects, IDS_TOOLTIP_OBJECTS);
@@ -291,6 +461,7 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cScaleMode.AddString (TEXT ("Fixed"));
 	m_cScaleMode.AddString (TEXT ("Peak"));
 	m_cScaleMode.AddString (TEXT ("Decay"));
+	m_cScaleMode.AddString (TEXT ("Auto"));
 
 	// Control value initialization
 	if (m_pMainFrame)
@@ -304,6 +475,7 @@ BOOL CDialogConfig::OnInitDialog ()
 
 	// Update the dialog with the data written to the member variables
 	UpdateData (FALSE);
+	RefreshScaleControls ();
 
 	// Set the initial focus to the icon type
 	m_cIconType.SetFocus ();
@@ -360,6 +532,7 @@ void CDialogConfig::OnBnClickedDefaultvalues()
 
 	// Update the dialog with the new data
 	UpdateData (FALSE);
+	RefreshScaleControls ();
 	UpdateSwatches ();
 	SelectPathInBrowser ();
 	UpdatePreview ();
@@ -404,6 +577,15 @@ void CDialogConfig::OnCbnSelchangeCounterSel ()
 		return;
 	}
 
+	// The 100% value of the previous counter must be valid before leaving it
+	m_nCounterSel	= nPrevious;
+	if (!Read100Percent ())
+	{
+		m_cCounterSel.SetCurSel (nPrevious);
+		return;
+	}
+	m_nCounterSel	= nNew;
+
 	SaveControlsToCounter (nPrevious);
 
 	// A counter that was never set up starts with the settings of the other one, once. E.g. the same adapter and units for download and upload.
@@ -416,6 +598,7 @@ void CDialogConfig::OnCbnSelchangeCounterSel ()
 
 	LoadCounterToControls (nNew);
 	UpdateData (FALSE);
+	RefreshScaleControls ();
 	SelectPathInBrowser ();
 	UpdatePreview ();
 }
@@ -431,6 +614,10 @@ BOOL CDialogConfig::ApplySettings ()
 {
 	// Get data into our member variables
 	if (!UpdateData (TRUE))
+	{
+		return FALSE;
+	}
+	if (!Read100Percent ())
 	{
 		return FALSE;
 	}
@@ -464,6 +651,7 @@ BOOL CDialogConfig::ApplySettings ()
 		LoadGlobalToControls ();
 		LoadCounterToControls (m_nCounterSel);
 		UpdateData (FALSE);
+		RefreshScaleControls ();
 		UpdateSwatches ();
 		UpdatePreview ();
 
@@ -1060,10 +1248,17 @@ void CDialogConfig::OnBnClickedUseSelectedDataSource()
 	}
 
 	// Use the path already built (and tested!)
+	BOOL	bNewSource	= (m_sCounterPath != m_sSelectedPerfPath);
 	m_sCounterPath	= m_sSelectedPerfPath;
+	if (bNewSource)
+	{
+		ApplyCounterDefaults ();
+	}
 
 	// Write the new path to the edit box
 	UpdateData (FALSE);
+	RefreshScaleControls ();
+	UpdatePreview ();
 }
 
 

@@ -30,12 +30,20 @@
 #define	SCALEMODE_FIXED				1		// The 100% value
 #define	SCALEMODE_PEAK				2		// The peak of the recent history (at least the 100% value)
 #define	SCALEMODE_DECAY				3		// A peak that slowly decays (at least the 100% value)
+#define	SCALEMODE_AUTO				4		// The highest value seen so far, learned over time and kept in the INI (at least the 100% value)
 #define	SCALEMODE_FIXED_TEXT		TEXT ("Fixed")
 #define	SCALEMODE_PEAK_TEXT			TEXT ("Peak")
 #define	SCALEMODE_DECAY_TEXT		TEXT ("Decay")
+#define	SCALEMODE_AUTO_TEXT			TEXT ("Auto")
 
 // Time after which the decaying peak has dropped to half
 #define	DECAY_HALFLIFE_MS			30000
+
+// Time after which the learned maximum (auto scale) has dropped to half. Very slow, so a quiet day does not forget the maximum.
+#define	LEARN_HALFLIFE_MS			86400000
+
+// The learned maximum is written to the INI file at most this often
+#define	LEARN_SAVE_MS				300000
 
 // Number of samples kept for the graph icon and for auto-scaling
 #define	HISTORY_SIZE				16
@@ -79,6 +87,7 @@
 #define INI_VALUE_100PERCENT		TEXT ("100% Utilization")
 #define INI_VALUE_VALUEFORMAT		TEXT ("ValueFormat")
 #define INI_VALUE_SCALEMODE			TEXT ("ScaleMode")
+#define INI_VALUE_LEARNEDMAX		TEXT ("LearnedMax")
 #define INI_VALUE_AUTOSCALE			TEXT ("AutoScale")				// Older versions: 1 = peak scaling. Only read.
 #define INI_VALUE_INVERT			TEXT ("Invert")
 #define INI_VALUE_ALERT_PERCENT		TEXT ("AlertAbove")
@@ -92,6 +101,7 @@ struct CounterSettings
 	double		d100Percent;		// Counter value that corresponds to 100%
 	DWORD		nValueFormat;		// VALUEFORMAT_*
 	DWORD		nScaleMode;			// SCALEMODE_*
+	double		dLearnedMax;		// The highest value seen (SCALEMODE_AUTO), 0 = nothing learned yet
 	BOOL		bInvert;			// Use the 100% value minus the counter value
 	int			nAlertPercent;		// Warn when the value is above this % of the 100% value, 0 = no warning
 	int			nAlertSeconds;		// ... for at least this many seconds
@@ -110,6 +120,9 @@ struct DiskLEDSettings
 };
 
 void	SetDefaultCounterSettings (CounterSettings& oCounter);
+
+// Sensible value format, scale mode and 100% value for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
+void	GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter);
 void	SetDefaultSettings (DiskLEDSettings& oSettings);
 void	NormalizeSettings (DiskLEDSettings& oSettings);
 DWORD	LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings);

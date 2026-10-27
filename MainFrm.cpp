@@ -58,6 +58,7 @@ CMainFrame::CMainFrame()
 	m_bPdhError				= FALSE;
 	m_bErrorShown			= FALSE;
 	m_nRetryTick			= 0;
+	m_nLastLearnSaveTick	= GetTickCount ();
 	m_nBadSamples			= 0;
 	m_nZeroSince			= 0;
 
@@ -254,6 +255,18 @@ DWORD CMainFrame::InitPDH (BOOL bSilent)
 				LogError (TEXT ("InitPDH"), (i == 0) ? TEXT ("PdhAddCounter") : TEXT ("PdhAddCounter (second counter)"), nError, sExplanation);
 			}
 			return nError;
+		}
+
+		// The auto scale cannot learn a maximum above the speed of the network adapter
+		m_aRuntime[i].dCeiling	= 0;
+		if (m_oSettings.aCounters[i].nScaleMode == SCALEMODE_AUTO)
+		{
+			double	dSpeed	= 0;
+
+			if (GetNetworkLinkSpeed (sPath, dSpeed))
+			{
+				m_aRuntime[i].dCeiling	= dSpeed;
+			}
 		}
 	}
 
@@ -605,6 +618,49 @@ void CMainFrame::Reconnect ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Keep the learned maximum of the auto scale in the INI file, so it survives a restart
+//	Only an existing INI file is updated, and only when the value changed noticeably. Write errors are ignored.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::SaveLearnedMax (BOOL bForce)
+{
+	DWORD	nTick	= GetTickCount ();
+
+	if (!bForce && nTick - m_nLastLearnSaveTick < LEARN_SAVE_MS)
+	{
+		return;
+	}
+	m_nLastLearnSaveTick	= nTick;
+
+	if (m_sINIFile.IsEmpty () || !IsFileExistent (m_sINIFile))
+	{
+		return;
+	}
+
+	for (int i = 0; i < m_nCounters; i++)
+	{
+		CounterRuntime&	oRuntime	= m_aRuntime[i];
+
+		if (m_oSettings.aCounters[i].nScaleMode != SCALEMODE_AUTO || !(oRuntime.dLearned > 0))
+		{
+			continue;
+		}
+		if (fabs (oRuntime.dLearned - oRuntime.dLearnedSaved) <= 0.02 * oRuntime.dLearned)
+		{
+			continue;
+		}
+
+		if (WriteINIValue (m_sINIFile, (i == 0) ? INI_COUNTER_1_SECTION : INI_COUNTER_2_SECTION, INI_VALUE_LEARNEDMAX, (double) oRuntime.dLearned) == ERROR_SUCCESS)
+		{
+			oRuntime.dLearnedSaved	= oRuntime.dLearned;
+		}
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Reading the counters failed while running: stop the query, show the error and reconnect later
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -735,6 +791,34 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 				dScale	= oRuntime.dDecayPeak;
 			}
 		}
+		else if (oCounter.nScaleMode == SCALEMODE_AUTO)
+		{
+			// The learned maximum rises with every new high and falls very slowly. Nothing above the adapter speed can be real.
+			DWORD	nElapsed	= (oRuntime.nLastTick != 0) ? nTick - oRuntime.nLastTick : m_oSettings.nUpdateInterval;
+			if (nElapsed > 60000)
+			{
+				nElapsed	= 60000;
+			}
+
+			double	dLearned	= oRuntime.dLearned * pow (0.5, (double) nElapsed / LEARN_HALFLIFE_MS);
+			double	dSample		= dValue;
+			if (oRuntime.dCeiling > 0)
+			{
+				dSample		= (dSample > oRuntime.dCeiling) ? oRuntime.dCeiling : dSample;
+				dLearned	= (dLearned > oRuntime.dCeiling) ? oRuntime.dCeiling : dLearned;
+			}
+			if (dSample > dLearned)
+			{
+				dLearned	= dSample;
+			}
+
+			oRuntime.dLearned						= dLearned;
+			m_oSettings.aCounters[i].dLearnedMax	= dLearned;
+			if (dLearned > dScale)
+			{
+				dScale	= dLearned;
+			}
+		}
 		oRuntime.nLastTick	= nTick;
 		oIcon.dScale		= dScale;
 
@@ -771,6 +855,8 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		m_nLastTooltipTick	= nTick;
 		UpdateTooltips ();
 	}
+
+	SaveLearnedMax (FALSE);
 
 	// Call the parent class's function
 	CFrameWnd::OnTimer (nIDEvent);
@@ -837,6 +923,8 @@ void CMainFrame::UpdateTooltips ()
 
 void CMainFrame::OnClose() 
 {
+	SaveLearnedMax (TRUE);
+
 	// Clean up the PDH variables
 	if (m_hQuery)
 	{
@@ -934,6 +1022,12 @@ DWORD CMainFrame::Initialize (BOOL bSilent)
 		SecureZeroMemory (&m_aIcon[i], sizeof (m_aIcon[i]));
 		m_aIcon[i].dScale		= m_oSettings.aCounters[i].d100Percent;
 		m_aIcon[i].nValueFormat	= m_oSettings.aCounters[i].nValueFormat;
+		m_aRuntime[i].dLearned		= m_oSettings.aCounters[i].dLearnedMax;
+		m_aRuntime[i].dLearnedSaved	= m_oSettings.aCounters[i].dLearnedMax;
+		if (m_oSettings.aCounters[i].nScaleMode == SCALEMODE_AUTO && m_aRuntime[i].dLearned > m_aIcon[i].dScale)
+		{
+			m_aIcon[i].dScale	= m_aRuntime[i].dLearned;
+		}
 	}
 	ClearErrorState ();
 
@@ -991,6 +1085,15 @@ DWORD CMainFrame::ApplySettings (const DiskLEDSettings& oSettings)
 	DiskLEDSettings	oPrevious	= m_oSettings;
 
 	m_oSettings	= oSettings;
+
+	// The dialog works on a copy: do not lose what was learned meanwhile
+	for (int i = 0; i < 2; i++)
+	{
+		if (oSettings.aCounters[i].sPath.CompareNoCase (oPrevious.aCounters[i].sPath) == 0 && oPrevious.aCounters[i].dLearnedMax > m_oSettings.aCounters[i].dLearnedMax)
+		{
+			m_oSettings.aCounters[i].dLearnedMax	= oPrevious.aCounters[i].dLearnedMax;
+		}
+	}
 
 	DWORD	nError	= Initialize (FALSE);
 	if (nError != ERROR_SUCCESS)
