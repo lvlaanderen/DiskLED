@@ -158,11 +158,12 @@ BEGIN
     LTEXT           "Update &frequency:",IDC_UPDATEFREQUENCY_TEXT1,7,108,62,8
     EDITTEXT        IDC_UPDATEFREQUENCY_EDIT,75,106,30,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "ms",IDC_UPDATEFREQUENCY_TEXT2,107,108,10,8
-    LTEXT           "Wa&rn above",IDC_WARN_TEXT1,7,54,40,8
-    EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,51,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "% of the 100% value, for",IDC_WARN_TEXT2,75,54,84,8
-    EDITTEXT        IDC_EDIT_ALERT_SECONDS,160,51,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "s  (0% = no warning)",IDC_WARN_TEXT3,185,54,100,8
+    LTEXT           "Show a notification when the value stays above a percentage of the scale (the value that fills the icon) for a set time. With the Peak, Decay and Auto scale the scale follows the highest recent values.",IDC_WARN_TEXT4,7,52,316,26
+    LTEXT           "Wa&rn above",IDC_WARN_TEXT1,7,86,40,8
+    EDITTEXT        IDC_EDIT_ALERT_PERCENT,50,83,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "% of the scale, for",IDC_WARN_TEXT2,75,86,64,8
+    EDITTEXT        IDC_EDIT_ALERT_SECONDS,142,83,22,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "s  (0% = no warning)",IDC_WARN_TEXT3,167,86,100,8
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,7,244,406,1
     CONTROL         "Start with &Windows",IDC_CHECK_AUTOSTART,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,252,120,10
     CONTROL         "&Update the INI file when applying settings",IDC_UPDATE_INI,
@@ -322,7 +323,7 @@ BEGIN
     IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). Auto: the highest value DiskLED has seen, remembered in the INI file and falling very slowly (halves in a day). With Peak, Decay and Auto the 100% value is the minimum."
     IDS_TOOLTIP_COUNTERSEL  "Which counter the settings below belong to. With a second counter, each counter has its own data source, 100% value, format, scale and warning."
     IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for the graph. The number icon gets a second tray icon instead."
-    IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the 100% value for this many seconds. 0% turns the warning off."
+    IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the scale (the value that fills the icon) for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_UPDATE_INI  "Update the INI configuration file when applying settings?"
     IDS_TOOLTIP_DEFAULT_VALUES "Restore default values?"
     IDS_TOOLTIP_100PERCENT  "The counter value that is a full icon. You can type a plain number (the raw counter value) or a value with a unit, e.g. 350 Mbit/s or 50 MB/s for network and disk speeds. With the Peak, Decay and Auto scale this is only the minimum."

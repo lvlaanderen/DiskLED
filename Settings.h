@@ -103,7 +103,7 @@ struct CounterSettings
 	DWORD		nScaleMode;			// SCALEMODE_*
 	double		dLearnedMax;		// The highest value seen (SCALEMODE_AUTO), 0 = nothing learned yet
 	BOOL		bInvert;			// Use the 100% value minus the counter value
-	int			nAlertPercent;		// Warn when the value is above this % of the 100% value, 0 = no warning
+	int			nAlertPercent;		// Warn when the value is above this % of the scale (the value that fills the icon), 0 = no warning
 	int			nAlertSeconds;		// ... for at least this many seconds
 };
 

@@ -461,13 +461,15 @@ void CMainFrame::CheckAlert (int nCounter)
 {
 	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
 	CounterRuntime&			oRuntime	= m_aRuntime[nCounter];
+	double					dScale		= m_aIcon[nCounter].dScale;
 
-	if (oCounter.nAlertPercent <= 0 || oCounter.d100Percent <= 0)
+	// The percentage is of the scale, the value that fills the icon. With the Peak, Decay and Auto scale, the 100% value is only a minimum.
+	if (oCounter.nAlertPercent <= 0 || dScale <= 0)
 	{
 		return;
 	}
 
-	double	dPercent	= m_aIcon[nCounter].dValue * 100.0 / oCounter.d100Percent;
+	double	dPercent	= m_aIcon[nCounter].dValue * 100.0 / dScale;
 	DWORD	nTick		= GetTickCount ();
 
 	if (!(dPercent >= oCounter.nAlertPercent))
@@ -502,7 +504,7 @@ void CMainFrame::CheckAlert (int nCounter)
 		CString	sText;
 
 		oRuntime.bAlerted	= TRUE;
-		sText.Format (TEXT ("%s: %s, above %d%% of the maximum for %d s."), (LPCTSTR) GetCounterLabel (nCounter),
+		sText.Format (TEXT ("%s: %s, above %d%% of the scale for %d s."), (LPCTSTR) GetCounterLabel (nCounter),
 			(LPCTSTR) FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED),
 			oCounter.nAlertPercent, oCounter.nAlertSeconds);
 

@@ -193,7 +193,7 @@ static const UINT g_aPageAppearance[] =
 
 static const UINT g_aPageAlerts[] =
 {
-	IDC_WARN_TEXT1, IDC_EDIT_ALERT_PERCENT, IDC_WARN_TEXT2, IDC_EDIT_ALERT_SECONDS, IDC_WARN_TEXT3, 0
+	IDC_WARN_TEXT1, IDC_EDIT_ALERT_PERCENT, IDC_WARN_TEXT2, IDC_EDIT_ALERT_SECONDS, IDC_WARN_TEXT3, IDC_WARN_TEXT4, 0
 };
 
 static const UINT* const g_aPages[] = { g_aPageDataSource, g_aPageScale, g_aPageAppearance, g_aPageAlerts };

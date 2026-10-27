@@ -104,6 +104,7 @@
 #define IDC_WARN_TEXT3                  1062
 #define IDC_LABEL_ICONTYPE              1063
 #define IDC_LABEL_PREVIEW               1064
+#define IDC_WARN_TEXT4                  1065
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -118,7 +119,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        170
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1065
+#define _APS_NEXT_CONTROL_VALUE         1066
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif
