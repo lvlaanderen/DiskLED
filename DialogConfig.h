@@ -50,9 +50,7 @@ private:
 	CEdit		m_c100Percent;
 	CDarkTabCtrl	m_cTab;
 	CComboBox	m_cQuickPick;
-	BOOL		m_bDark;				// The dialog is shown in the dark theme
-	CBrush		m_brBack;
-	CBrush		m_brEdit;
+	CDarkTheme	m_oTheme;				// Follows the Windows app theme (dark or light)
 	CStatic		m_cLinkSpeedText;
 	CButton		m_cUseLinkSpeed;
 	CEdit		m_cCounterPath;
@@ -148,6 +146,7 @@ public:
 	afx_msg void OnColorButton(UINT nID);
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
+	afx_msg void OnSettingChange(UINT uFlags, LPCTSTR lpszSection);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnCbnSelchangeCounterSel();

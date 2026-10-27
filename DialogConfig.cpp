@@ -22,7 +22,6 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_nUpdateINI(0)
 														, m_d100Percent(0)
 														, m_nTab(0)
-														, m_bDark(FALSE)
 														, m_dLinkSpeed(0)
 														, m_sCounterPath(_T(""))
 														, m_sPerfObject(_T(""))
@@ -157,6 +156,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
 	ON_WM_DRAWITEM()
 	ON_WM_CTLCOLOR()
+	ON_WM_SETTINGCHANGE()
 	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CDialogConfig::OnTcnSelchangeTab)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
@@ -548,14 +548,8 @@ BOOL CDialogConfig::OnInitDialog ()
 	CDialog::OnInitDialog ();
 
 	// Dark theme, if Windows apps use it
-	m_bDark	= IsDarkModeEnabled ();
-	if (m_bDark)
-	{
-		m_brBack.CreateSolidBrush (DARK_COLOR_BACK);
-		m_brEdit.CreateSolidBrush (DARK_COLOR_EDIT);
-		EnableDarkMode (m_hWnd);
-		m_cTab.SetDark (TRUE);
-	}
+	m_oTheme.Update (m_hWnd);
+	m_cTab.SetDark (m_oTheme.IsDark ());
 
 	// Set up tooltip support
 	if (m_oToolTip.Create (this))
@@ -666,10 +660,6 @@ BOOL CDialogConfig::OnInitDialog ()
 void CDialogConfig::OnDestroy ()
 {
 	KillTimer (PREVIEW_TIMER_ID);
-	if (m_bDark)
-	{
-		ReleaseDarkMode ();
-	}
 
 	CDialog::OnDestroy ();
 }
@@ -677,24 +667,28 @@ void CDialogConfig::OnDestroy ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Dark theme: the dialog colours the background and the texts of its controls
+//	Dark theme: the dialog colours the background and the texts of its controls, and follows the Windows setting while it is open
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 HBRUSH CDialogConfig::OnCtlColor (CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 {
-	if (!m_bDark)
-	{
-		return CDialog::OnCtlColor (pDC, pWnd, nCtlColor);
-	}
-
 	int		nID		= pWnd->GetDlgCtrlID ();
 	BOOL	bField	= (nCtlColor == CTLCOLOR_EDIT || nCtlColor == CTLCOLOR_LISTBOX || nID == IDC_COUNTERPATH_EDIT || nID == IDC_PERF_DESCRIPTION);
+	HBRUSH	hBrush	= m_oTheme.CtlColor (pDC, bField);
 
-	pDC->SetTextColor (DARK_COLOR_TEXT);
-	pDC->SetBkColor (bField ? DARK_COLOR_EDIT : DARK_COLOR_BACK);
+	return hBrush ? hBrush : CDialog::OnCtlColor (pDC, pWnd, nCtlColor);
+}
 
-	return bField ? (HBRUSH) m_brEdit : (HBRUSH) m_brBack;
+void CDialogConfig::OnSettingChange (UINT uFlags, LPCTSTR lpszSection)
+{
+	CDialog::OnSettingChange (uFlags, lpszSection);
+
+	if (m_hWnd && lpszSection && _tcscmp (lpszSection, TEXT ("ImmersiveColorSet")) == 0 && m_oTheme.Update (m_hWnd))
+	{
+		m_cTab.SetDark (m_oTheme.IsDark ());
+		UpdatePreview ();
+	}
 }
 
 
@@ -1012,7 +1006,7 @@ void CDialogConfig::OnDrawItem (int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 			nZoom	= 1;
 		}
 
-		pDC->FillSolidRect (oRect, m_bDark ? DARK_COLOR_BACK : GetSysColor (COLOR_BTNFACE));
+		pDC->FillSolidRect (oRect, m_oTheme.IsDark () ? DARK_COLOR_BACK : GetSysColor (COLOR_BTNFACE));
 
 		if (oMemDC.CreateCompatibleDC (pDC) && oBitmap.CreateCompatibleBitmap (pDC, nSize, nSize))
 		{

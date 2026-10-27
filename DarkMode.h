@@ -1,6 +1,6 @@
 #pragma once
 
-// Colours of the dark configuration dialog
+// Colours of the dark dialogs
 #define	DARK_COLOR_BACK				RGB (32, 32, 32)
 #define	DARK_COLOR_EDIT				RGB (45, 45, 45)
 #define	DARK_COLOR_TEXT				RGB (240, 240, 240)
@@ -10,11 +10,32 @@
 // Are Windows apps set to the dark theme, and does this version of Windows support dark controls (Windows 10 1809 or later)?
 BOOL	IsDarkModeEnabled ();
 
-// Make a dialog dark: title bar, and the themes of its buttons, combo boxes and edit fields. The caller colours the background and the texts (WM_CTLCOLOR*).
-void	EnableDarkMode (HWND hDialog);
+// Let the process follow the Windows app theme: dark menus (the tray menu) when apps are dark. Call once at startup.
+void	InitDarkMode ();
 
-// Undo what EnableDarkMode did to the process. Call when the dialog is closed.
-void	ReleaseDarkMode ();
+// Dark or normal title bar and control themes for a dialog. The dialog colours its background and texts itself (see CDarkTheme).
+void	ApplyDarkMode (HWND hDialog, BOOL bDark);
+
+
+// The dark theme of one dialog: follows the Windows app theme, and supplies the colours for WM_CTLCOLOR*
+class CDarkTheme
+{
+public:
+	CDarkTheme () : m_bDark (FALSE) {}
+
+	BOOL	IsDark () const { return m_bDark; }
+
+	// Read the Windows setting and apply it to the dialog and its controls. Returns TRUE if the theme changed.
+	BOOL	Update (HWND hDialog);
+
+	// The brush for a control, or NULL when not dark (use the default). bField: an edit-like control.
+	HBRUSH	CtlColor (CDC* pDC, BOOL bField);
+
+private:
+	BOOL	m_bDark;
+	CBrush	m_brBack;
+	CBrush	m_brEdit;
+};
 
 
 // A tab strip that draws itself dark. Behaves like the normal tab control when not dark.

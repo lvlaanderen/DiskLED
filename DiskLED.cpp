@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #include "DiskLED.h"
 #include "MainFrm.h"
+#include "DarkMode.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -44,6 +45,9 @@ BOOL CDiskLEDApp::InitInstance()
 	// in your application.
 	InitCtrls.dwICC = ICC_WIN95_CLASSES;
 	InitCommonControlsEx(&InitCtrls);
+
+	// Menus follow the Windows app theme (dark or light)
+	InitDarkMode ();
 
 	CWinAppEx::InitInstance();
 

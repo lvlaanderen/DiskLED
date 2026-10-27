@@ -1,4 +1,4 @@
-// DarkMode.cpp : dark theme for the configuration dialog (best effort, plain MFC controls do not support it fully)
+// DarkMode.cpp : dark theme for the dialogs (best effort, plain MFC controls do not support it fully)
 //
 
 #include "stdafx.h"
@@ -13,11 +13,13 @@
 #define DWMWA_USE_IMMERSIVE_DARK_MODE	20
 #endif
 
+#define	DWMWA_DARK_MODE_BEFORE_20H1		19
+
 #define	BUILD_WIN10_1809		17763
 #define	BUILD_WIN10_1903		18362
+#define	BUILD_WIN10_20H1		18985
 
-#define	APPMODE_DEFAULT			0
-#define	APPMODE_FORCEDARK		2
+#define	APPMODE_ALLOWDARK		1
 
 
 // The Windows build number, 0 if unknown
@@ -44,34 +46,6 @@ static DWORD GetWindowsBuild ()
 	return (pRtlGetVersion (&oVersion) == 0) ? oVersion.dwBuildNumber : 0;
 }
 
-// uxtheme.dll ordinal 135 lets the process use the dark control themes. It is undocumented: AllowDarkModeForApp(BOOL) before 1903, SetPreferredAppMode(int) from 1903.
-static void SetProcessDarkMode (BOOL bDark)
-{
-	HMODULE	hUxTheme	= GetModuleHandle (TEXT ("uxtheme.dll"));
-	DWORD	nBuild		= GetWindowsBuild ();
-
-	if (hUxTheme == NULL || nBuild < BUILD_WIN10_1809)
-	{
-		return;
-	}
-
-	FARPROC	pFunction	= GetProcAddress (hUxTheme, MAKEINTRESOURCEA (135));
-	if (pFunction == NULL)
-	{
-		return;
-	}
-
-	if (nBuild >= BUILD_WIN10_1903)
-	{
-		((int (WINAPI*) (int)) pFunction) (bDark ? APPMODE_FORCEDARK : APPMODE_DEFAULT);
-	}
-	else
-	{
-		((BOOL (WINAPI*) (BOOL)) pFunction) (bDark);
-	}
-}
-
-
 BOOL IsDarkModeEnabled ()
 {
 	DWORD	nLight	= 1;
@@ -90,46 +64,128 @@ BOOL IsDarkModeEnabled ()
 	return nLight == 0;
 }
 
-static BOOL CALLBACK ThemeChildWindow (HWND hChild, LPARAM)
+// uxtheme.dll ordinals 135 and 136 are undocumented: AllowDarkModeForApp(BOOL) before 1903, SetPreferredAppMode(int) from 1903, and FlushMenuThemes()
+void InitDarkMode ()
 {
-	TCHAR	sClass[64]	= { 0 };
-	LONG	nStyle		= GetWindowLong (hChild, GWL_STYLE);
+	HMODULE	hUxTheme	= GetModuleHandle (TEXT ("uxtheme.dll"));
+	DWORD	nBuild		= GetWindowsBuild ();
+
+	if (hUxTheme == NULL || nBuild < BUILD_WIN10_1809)
+	{
+		return;
+	}
+
+	FARPROC	pSetMode	= GetProcAddress (hUxTheme, MAKEINTRESOURCEA (135));
+	FARPROC	pFlushMenus	= GetProcAddress (hUxTheme, MAKEINTRESOURCEA (136));
+	if (pSetMode == NULL)
+	{
+		return;
+	}
+
+	if (nBuild >= BUILD_WIN10_1903)
+	{
+		((int (WINAPI*) (int)) pSetMode) (APPMODE_ALLOWDARK);
+	}
+	else
+	{
+		((BOOL (WINAPI*) (BOOL)) pSetMode) (TRUE);
+	}
+	if (pFlushMenus)
+	{
+		((void (WINAPI*) ()) pFlushMenus) ();
+	}
+}
+
+static BOOL CALLBACK ThemeChildWindow (HWND hChild, LPARAM lDark)
+{
+	TCHAR			sClass[64]	= { 0 };
+	LONG			nStyle		= GetWindowLong (hChild, GWL_STYLE);
+	BOOL			bDark		= (BOOL) lDark;
+	const WCHAR*	sTheme		= NULL;
 
 	GetClassName (hChild, sClass, _countof (sClass));
 
 	if (_tcsicmp (sClass, TEXT ("Button")) == 0)
 	{
 		// The colour swatches are drawn by the dialog
-		if ((nStyle & BS_TYPEMASK) != BS_OWNERDRAW)
+		if ((nStyle & BS_TYPEMASK) == BS_OWNERDRAW)
 		{
-			SetWindowTheme (hChild, L"DarkMode_Explorer", NULL);
+			return TRUE;
 		}
+		sTheme	= L"DarkMode_Explorer";
 	}
 	else if (_tcsicmp (sClass, TEXT ("ComboBox")) == 0)
 	{
-		SetWindowTheme (hChild, L"DarkMode_CFD", NULL);
+		sTheme	= L"DarkMode_CFD";
 	}
 	else if (_tcsicmp (sClass, TEXT ("Edit")) == 0)
 	{
 		// A multi-line edit has a scroll bar
-		SetWindowTheme (hChild, (nStyle & ES_MULTILINE) ? L"DarkMode_Explorer" : L"DarkMode_CFD", NULL);
+		sTheme	= (nStyle & ES_MULTILINE) ? L"DarkMode_Explorer" : L"DarkMode_CFD";
 	}
+	else
+	{
+		return TRUE;
+	}
+
+	// No theme name: back to the default
+	SetWindowTheme (hChild, bDark ? sTheme : NULL, NULL);
 
 	return TRUE;
 }
 
-void EnableDarkMode (HWND hDialog)
+void ApplyDarkMode (HWND hDialog, BOOL bDark)
 {
-	BOOL	bDark	= TRUE;
+	// The title bar attribute has another number before Windows 10 20H1
+	DWORD	nAttribute	= (GetWindowsBuild () >= BUILD_WIN10_20H1) ? DWMWA_USE_IMMERSIVE_DARK_MODE : DWMWA_DARK_MODE_BEFORE_20H1;
 
-	SetProcessDarkMode (TRUE);
-	DwmSetWindowAttribute (hDialog, DWMWA_USE_IMMERSIVE_DARK_MODE, &bDark, sizeof (bDark));
-	EnumChildWindows (hDialog, ThemeChildWindow, 0);
+	DwmSetWindowAttribute (hDialog, nAttribute, &bDark, sizeof (bDark));
+	EnumChildWindows (hDialog, ThemeChildWindow, (LPARAM) bDark);
+	RedrawWindow (hDialog, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
 }
 
-void ReleaseDarkMode ()
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The dark theme of a dialog
+//
+////////////////////////////////////////////////////////////////////////////////
+
+BOOL CDarkTheme::Update (HWND hDialog)
 {
-	SetProcessDarkMode (FALSE);
+	BOOL	bDark	= IsDarkModeEnabled ();
+
+	if (bDark && m_brBack.GetSafeHandle () == NULL)
+	{
+		m_brBack.CreateSolidBrush (DARK_COLOR_BACK);
+		m_brEdit.CreateSolidBrush (DARK_COLOR_EDIT);
+	}
+
+	// A light dialog that was never dark already has the default look
+	if (bDark == m_bDark && !bDark)
+	{
+		return FALSE;
+	}
+
+	BOOL	bChanged	= (bDark != m_bDark);
+
+	m_bDark	= bDark;
+	ApplyDarkMode (hDialog, bDark);
+
+	return bChanged;
+}
+
+HBRUSH CDarkTheme::CtlColor (CDC* pDC, BOOL bField)
+{
+	if (!m_bDark)
+	{
+		return NULL;
+	}
+
+	pDC->SetTextColor (DARK_COLOR_TEXT);
+	pDC->SetBkColor (bField ? DARK_COLOR_EDIT : DARK_COLOR_BACK);
+
+	return bField ? (HBRUSH) m_brEdit : (HBRUSH) m_brBack;
 }
 
 
