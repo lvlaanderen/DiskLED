@@ -318,6 +318,23 @@ BOOL CSystemTray::MoveToRight()
     return AddIcon();
 }
 
+// NIM_MODIFY fails when the shell no longer knows the icon: add it again with the current icon and tooltip.
+// A failure is retried by the next call, a failed NIM_ADD must not leave the icon silently hidden.
+BOOL CSystemTray::ModifyOrAddIcon()
+{
+    BOOL bResult = Shell_NotifyIcon(NIM_MODIFY, &m_tnd);
+
+    if (!bResult)
+    {
+        m_tnd.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        bResult = Shell_NotifyIcon(NIM_ADD, &m_tnd);
+    }
+
+    m_bHidden = m_bRemoved = m_bShowIconPending = !bResult;
+
+    return bResult;
+}
+
 BOOL CSystemTray::AddIcon()
 {
     if (!m_bRemoved)
@@ -401,10 +418,11 @@ BOOL CSystemTray::SetIcon(HICON hIcon)
     m_tnd.uFlags = NIF_ICON;
     m_tnd.hIcon = hIcon;
 
-    if (m_bHidden)
+    // Hidden on purpose: nothing to do. Hidden because adding failed: try again.
+    if (m_bHidden && !m_bShowIconPending)
         return TRUE;
     else
-        return Shell_NotifyIcon(NIM_MODIFY, &m_tnd);
+        return ModifyOrAddIcon();
 }
 
 BOOL CSystemTray::SetIcon(LPCTSTR lpszIconName)
@@ -556,10 +574,10 @@ BOOL CSystemTray::SetTooltipText(CString pszTip)
     m_tnd.uFlags = NIF_TIP;
     _tcsncpy_s (m_tnd.szTip, m_nMaxTooltipLength, pszTip, m_nMaxTooltipLength - 1);
 
-    if (m_bHidden)
+    if (m_bHidden && !m_bShowIconPending)
         return TRUE;
     else
-        return Shell_NotifyIcon(NIM_MODIFY, &m_tnd);
+        return ModifyOrAddIcon();
 }
 
 BOOL CSystemTray::SetTooltipText(UINT nID)
@@ -895,20 +913,23 @@ LRESULT CSystemTray::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 void CSystemTray::InstallIconPending()
 {
-    // Is the icon display pending, and it's not been set as "hidden"?
-    if (!m_bShowIconPending || m_bHidden)
+    // Is the icon display pending? (Hidden on purpose is not pending.)
+    if (!m_bShowIconPending)
         return;
 
 	// Reset the flags to what was used at creation
 	m_tnd.uFlags = m_uCreationFlags;
 
-    // Try and recreate the icon
-    m_bHidden = !Shell_NotifyIcon(NIM_ADD, &m_tnd);
+    // Try and recreate the icon. If the shell still has it, NIM_ADD fails: update it instead.
+    BOOL bResult = Shell_NotifyIcon(NIM_ADD, &m_tnd);
+    if (!bResult)
+    {
+        bResult = Shell_NotifyIcon(NIM_MODIFY, &m_tnd);
+    }
+    m_bHidden = m_bRemoved = !bResult;
 
-    // If it's STILL hidden, then have another go next time...
+    // If it's STILL hidden, then the next icon or tooltip update has another go
     m_bShowIconPending = m_bHidden;
-
-    ASSERT(m_bHidden == FALSE);
 }
 
 /////////////////////////////////////////////////////////////////////////////

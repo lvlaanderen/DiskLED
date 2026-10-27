@@ -58,6 +58,8 @@ CMainFrame::CMainFrame()
 	m_bPdhError				= FALSE;
 	m_bErrorShown			= FALSE;
 	m_nRetryTick			= 0;
+	m_nBadSamples			= 0;
+	m_nZeroSince			= 0;
 
 	SetDefaultSettings (m_oSettings);
 	MakeIconStyle (m_oSettings, m_oStyle);
@@ -336,8 +338,14 @@ void CMainFrame::Shutdown ()
 }
 
 
-afx_msg LRESULT CMainFrame::OnPowerBroadcast(WPARAM, LPARAM)
+afx_msg LRESULT CMainFrame::OnPowerBroadcast(WPARAM wParam, LPARAM)
 {
+	// The performance query can be stale after standby/hibernation (adapters and disks come back)
+	if (wParam == PBT_APMRESUMEAUTOMATIC || wParam == PBT_APMRESUMESUSPEND)
+	{
+		Reconnect ();
+	}
+
 	return 0L;
 }
 
@@ -552,9 +560,46 @@ void CMainFrame::ClearErrorState ()
 {
 	m_bPdhError			= FALSE;
 	m_bErrorShown		= FALSE;
+	m_nBadSamples		= 0;
+	m_nZeroSince		= 0;
 	m_nIconKey			= ICONKEY_NONE;
 	m_nIconKey2			= ICONKEY_NONE;
 	m_nLastTooltipTick	= 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	A sample could not be used: tolerate a few, then assume the query is stale and open a new one
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::SkipSample ()
+{
+	if (++m_nBadSamples >= BAD_SAMPLES_MAX)
+	{
+		Reconnect ();
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Open a new query. The history is kept. On failure the error state is shown and the timer keeps retrying.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::Reconnect ()
+{
+	m_nBadSamples	= 0;
+	m_nZeroSince	= 0;
+	m_aRuntime[0].nLastTick	= 0;
+	m_aRuntime[1].nLastTick	= 0;
+
+	if (InitPDH (TRUE) != ERROR_SUCCESS)
+	{
+		ShowErrorState (m_sLastError, FALSE);
+	}
 }
 
 
@@ -605,6 +650,8 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		return;
 	}
 
+	BOOL	bAllZero	= TRUE;
+
 	for (int i = 0; i < m_nCounters; i++)
 	{
 		const CounterSettings&	oCounter	= m_oSettings.aCounters[i];
@@ -621,7 +668,8 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 			{
 				// This (PDH_CALC_NEGATIVE_VALUE) happens on Windows 7 RTM if a USB flash drive is inserted.
 				// The algorithm probably has a bug in that it returns a negative value because of the additional disk which cannot be converted to LONG.
-				// Ignore this and do nothing.
+				// A single such sample is ignored, a persistent one means the query is stale.
+				SkipSample ();
 				return;
 			}
 			else
@@ -629,6 +677,13 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 				HandlePdhError (TEXT ("PdhGetFormattedCounterValue"), nError);
 				return;
 			}
+		}
+
+		// The call can succeed with a value that is not valid (e.g. the network adapter instance is gone)
+		if (oValue.CStatus != PDH_CSTATUS_VALID_DATA && oValue.CStatus != PDH_CSTATUS_NEW_DATA)
+		{
+			SkipSample ();
+			return;
 		}
 
 		double	dValue	= oValue.doubleValue;
@@ -640,6 +695,10 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		{
 			// Also catches NaN
 			dValue	= 0;
+		}
+		if (dValue > 0)
+		{
+			bAllZero	= FALSE;
 		}
 
 		// Remember the sample (oldest first)
@@ -680,6 +739,27 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		oIcon.dScale		= dScale;
 
 		CheckAlert (i);
+	}
+
+	// A usable sample
+	m_nBadSamples	= 0;
+
+	// Counters that read zero for a long time may be stale: open a new query
+	if (!bAllZero)
+	{
+		m_nZeroSince	= 0;
+	}
+	else if (m_nZeroSince == 0)
+	{
+		m_nZeroSince	= nTick;
+	}
+	else if (nTick - m_nZeroSince >= STALE_ZERO_MS)
+	{
+		Reconnect ();
+		if (m_hQuery == NULL)
+		{
+			return;
+		}
 	}
 
 	// Update the icon(s). Icons are only redrawn when what they show changes.

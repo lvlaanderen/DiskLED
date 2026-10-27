@@ -128,6 +128,7 @@ public:
 protected:
     void Initialise();
     void InstallIconPending();
+    BOOL ModifyOrAddIcon();
 
 	virtual void CustomizeMenu(CMenu*) {}	// Used for customizing the menu
 

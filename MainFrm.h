@@ -20,6 +20,12 @@
 // A value that dips below the alert threshold for less than this long does not restart the alert timer
 #define	ALERT_DIP_MS				3000
 
+// Number of consecutive unusable samples after which the counters are reconnected
+#define	BAD_SAMPLES_MAX				5
+
+// All counters reading exactly zero for this long is treated as a possibly stale query (e.g. after a network adapter change), the counters are reconnected
+#define	STALE_ZERO_MS				60000
+
 
 // Runtime state of one performance counter
 struct CounterRuntime
@@ -84,6 +90,8 @@ private:
 	BOOL					m_bPdhError;					// The counters could not be read, reconnecting every PDH_RETRY_MS
 	BOOL					m_bErrorShown;					// The error was already reported with a balloon
 	DWORD					m_nRetryTick;					// Tick count of the last (re)connection attempt
+	int						m_nBadSamples;					// Consecutive samples that could not be used
+	DWORD					m_nZeroSince;					// Tick count since when all counters read zero, 0 = not all zero
 	CString					m_sLastError;
 
 	// Member functions
@@ -104,6 +112,8 @@ private:
 	void					ShowErrorState (const CString& sMessage, BOOL bBalloon);
 	void					ClearErrorState ();
 	void					HandlePdhError (const CString& sCaller, DWORD nError);
+	void					SkipSample ();
+	void					Reconnect ();
 	void					CheckAlert (int nCounter);
 
 
