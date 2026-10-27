@@ -47,6 +47,7 @@ private:
 	CStatic		m_cUpdateFrequencyText2;
 	CEdit		m_cUpdateFrequencyEdit;
 	CEdit		m_c100Percent;
+	CTabCtrl	m_cTab;
 	CStatic		m_cLinkSpeedText;
 	CButton		m_cUseLinkSpeed;
 	CEdit		m_cCounterPath;
@@ -60,6 +61,7 @@ private:
 
 	// Control value variables
 	int			m_nCounterSel;			// Which counter the counter settings controls show: 0 or 1
+	int			m_nTab;					// The page shown: 0 data source, 1 scale, 2 appearance, 3 alerts
 	BOOL		m_bSecondCounterSeeded;	// The second counter already got the first counter's settings as a starting point
 	int			m_nSecondCounter;
 	int			m_nLEDType;				// Icon type - 1
@@ -123,6 +125,8 @@ private:
 	BOOL		Read100Percent ();
 	void		UpdateScaleLabel ();
 	void		UpdateLinkSpeedHint ();
+	void		UpdateLinkSpeedVisibility ();
+	void		ShowPage (int nPage);
 	void		RefreshScaleControls ();
 	void		ApplyCounterDefaults ();
 	void		InitPerfBrowser ();
@@ -141,6 +145,7 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnCbnSelchangeCounterSel();
+	afx_msg void OnTcnSelchangeTab(NMHDR* pNMHDR, LRESULT* pResult);
 	afx_msg void OnCbnSelchangeValueFormat();
 	afx_msg void OnCbnSelchangeScaleMode();
 	afx_msg void OnBnClickedUseLinkSpeed();

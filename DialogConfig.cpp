@@ -21,6 +21,7 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_nThresholdMid(0), m_nThresholdHigh(0)
 														, m_nUpdateINI(0)
 														, m_d100Percent(0)
+														, m_nTab(0)
 														, m_dLinkSpeed(0)
 														, m_sCounterPath(_T(""))
 														, m_sPerfObject(_T(""))
@@ -111,6 +112,7 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_UPDATE_INI, m_cUpdateINI);
 	DDX_Control(pDX, IDC_DEFAULTVALUES, m_cDefaultValues);
 	DDX_Control(pDX, IDC_100PERCENT_EDIT, m_c100Percent);
+	DDX_Control(pDX, IDC_TAB_MAIN, m_cTab);
 	DDX_Control(pDX, IDC_LINKSPEED_TEXT, m_cLinkSpeedText);
 	DDX_Control(pDX, IDC_USE_LINKSPEED, m_cUseLinkSpeed);
 	DDX_Control(pDX, IDC_COUNTERPATH_EDIT, m_cCounterPath);
@@ -151,6 +153,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_BN_CLICKED(IDC_USE_LINKSPEED, &CDialogConfig::OnBnClickedUseLinkSpeed)
 	ON_CONTROL_RANGE(BN_CLICKED, IDC_COLOR_LOW, IDC_COLOR_HIGH, &CDialogConfig::OnColorButton)
 	ON_WM_DRAWITEM()
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CDialogConfig::OnTcnSelchangeTab)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
 	ON_CBN_SELCHANGE(IDC_COMBO_COUNTERSEL, &CDialogConfig::OnCbnSelchangeCounterSel)
@@ -160,6 +163,71 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_CBN_SELCHANGE(IDC_PERF_COUNTERS, &CDialogConfig::OnCbnSelchangePerfCounters)
 	ON_CBN_SELCHANGE(IDC_PERF_INSTANCES, &CDialogConfig::OnCbnSelchangePerfInstances)
 END_MESSAGE_MAP()
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Pages: the controls of each page of the tab strip. The settings are all in this one dialog, a page only shows its own controls.
+//	The link speed controls are not listed, they are only shown on the scale page when the counter is a network counter.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static const UINT g_aPageDataSource[] =
+{
+	IDC_COUNTERPATH_TEXT2, IDC_PERF_OBJECTS, IDC_COUNTERPATH_TEXT3, IDC_PERF_COUNTERS, IDC_COUNTERPATH_TEXT4, IDC_PERF_INSTANCES,
+	IDC_COUNTERPATH_TEXT5, IDC_PERF_DESCRIPTION, IDC_USE_SELECTED_DATA_SOURCE, IDC_COUNTERPATH_TEXT, IDC_COUNTERPATH_EDIT, 0
+};
+
+static const UINT g_aPageScale[] =
+{
+	IDC_100PERCENT_TEXT, IDC_100PERCENT_TEXT2, IDC_100PERCENT_EDIT, IDC_VALUEFORMAT_TEXT, IDC_COMBO_VALUEFORMAT,
+	IDC_SCALEMODE_TEXT, IDC_COMBO_SCALEMODE, IDC_CHECK_INVERT, 0
+};
+
+static const UINT g_aPageAppearance[] =
+{
+	IDC_COLORS_TEXT, IDC_COLOR_LOW, IDC_COLOR_MID, IDC_COLOR_HIGH, IDC_MIDFROM_TEXT, IDC_EDIT_THRESHOLD_MID, IDC_HIGHFROM_TEXT,
+	IDC_EDIT_THRESHOLD_HIGH, IDC_PERCENT_TEXT, IDC_100PERCENT_TEXT3, IDC_UPDATEFREQUENCY_TEXT1, IDC_UPDATEFREQUENCY_EDIT,
+	IDC_UPDATEFREQUENCY_TEXT2, 0
+};
+
+static const UINT g_aPageAlerts[] =
+{
+	IDC_WARN_TEXT1, IDC_EDIT_ALERT_PERCENT, IDC_WARN_TEXT2, IDC_EDIT_ALERT_SECONDS, IDC_WARN_TEXT3, 0
+};
+
+static const UINT* const g_aPages[] = { g_aPageDataSource, g_aPageScale, g_aPageAppearance, g_aPageAlerts };
+
+void CDialogConfig::ShowPage (int nPage)
+{
+	for (int i = 0; i < _countof (g_aPages); i++)
+	{
+		for (const UINT* pID = g_aPages[i]; *pID != 0; pID++)
+		{
+			CWnd*	pControl	= GetDlgItem (*pID);
+
+			if (pControl)
+			{
+				pControl->ShowWindow ((i == nPage) ? SW_SHOW : SW_HIDE);
+			}
+		}
+	}
+
+	m_nTab	= nPage;
+	UpdateLinkSpeedVisibility ();
+}
+
+void CDialogConfig::OnTcnSelchangeTab (NMHDR*, LRESULT* pResult)
+{
+	int	nPage	= m_cTab.GetCurSel ();
+
+	if (nPage >= 0 && nPage < _countof (g_aPages))
+	{
+		ShowPage (nPage);
+	}
+
+	*pResult	= 0;
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -290,15 +358,22 @@ void CDialogConfig::UpdateLinkSpeedHint ()
 	if (!sPath.IsEmpty () && GetNetworkLinkSpeed (sPath, m_dLinkSpeed))
 	{
 		m_cLinkSpeedText.SetWindowText (TEXT ("Adapter speed: ") + FormatScaleValue (VALUEFORMAT_BITS, m_dLinkSpeed));
-		m_cLinkSpeedText.ShowWindow (SW_SHOW);
-		m_cUseLinkSpeed.ShowWindow (SW_SHOW);
 	}
 	else
 	{
 		m_dLinkSpeed	= 0;
-		m_cLinkSpeedText.ShowWindow (SW_HIDE);
-		m_cUseLinkSpeed.ShowWindow (SW_HIDE);
 	}
+
+	UpdateLinkSpeedVisibility ();
+}
+
+// The link speed controls belong to the scale page and only make sense for a network counter
+void CDialogConfig::UpdateLinkSpeedVisibility ()
+{
+	int	nShow	= (m_nTab == 1 && m_dLinkSpeed > 0) ? SW_SHOW : SW_HIDE;
+
+	m_cLinkSpeedText.ShowWindow (nShow);
+	m_cUseLinkSpeed.ShowWindow (nShow);
 }
 
 void CDialogConfig::RefreshScaleControls ()
@@ -476,6 +551,14 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Update the dialog with the data written to the member variables
 	UpdateData (FALSE);
 	RefreshScaleControls ();
+
+	// The pages
+	m_cTab.InsertItem (0, TEXT ("Data source"));
+	m_cTab.InsertItem (1, TEXT ("Scale and values"));
+	m_cTab.InsertItem (2, TEXT ("Appearance"));
+	m_cTab.InsertItem (3, TEXT ("Alerts"));
+	m_cTab.SetCurSel (0);
+	ShowPage (0);
 
 	// Set the initial focus to the icon type
 	m_cIconType.SetFocus ();

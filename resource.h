@@ -93,6 +93,17 @@
 #define IDC_TEXT4                       1051
 #define IDC_LINKSPEED_TEXT              1052
 #define IDC_USE_LINKSPEED               1053
+#define IDC_TAB_MAIN                    1054
+#define IDC_SCALEMODE_TEXT              1055
+#define IDC_COLORS_TEXT                 1056
+#define IDC_MIDFROM_TEXT                1057
+#define IDC_HIGHFROM_TEXT               1058
+#define IDC_PERCENT_TEXT                1059
+#define IDC_WARN_TEXT1                  1060
+#define IDC_WARN_TEXT2                  1061
+#define IDC_WARN_TEXT3                  1062
+#define IDC_LABEL_ICONTYPE              1063
+#define IDC_LABEL_PREVIEW               1064
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -107,7 +118,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        170
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1054
+#define _APS_NEXT_CONTROL_VALUE         1065
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif
