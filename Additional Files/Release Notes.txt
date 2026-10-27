@@ -1,9 +1,35 @@
-Release notes for DiskLED 2.0, a fork by Lourens Vlaanderen of DiskLED by Helge Klein
+Release notes for DiskLED, a fork by Lourens Vlaanderen of DiskLED by Helge Klein
 
 This version (downloads and source): https://github.com/lvlaanderen/DiskLED
 The original DiskLED by Helge Klein:  https://helgeklein.com/free-tools/diskled/
 
 DiskLED is licensed under the Apache License 2.0, see LICENSE.txt.
+
+
+#### Version 2.1.0 (fork) ####
+
+Settings in DiskLED.ini from version 2.0 and older keep working. Version 2.0 stays available on the releases page.
+
+A new configuration dialog:
+- Four tabs: Data source, Scale and values, Appearance and Alerts. The icon type and the live preview stay visible on every tab.
+- Follows the Windows app theme: dark or light, also while the dialog is open. The About dialog and the tray menu follow it too (Windows 10 version 1809 or later).
+- Sharp on high-DPI screens. The tray icons are drawn at the real tray icon size.
+
+Easier setup:
+- Quick pick: choose Internet download speed, Internet upload speed, Disk activity, Processor use or Memory in use, and DiskLED fills in the counter, the units and the scale. For the internet speed it finds the network adapter that connects to the internet.
+- Choosing a counter in the lists now fills in sensible defaults too: 100 for percent counters, the installed memory for memory counters, and so on. You can change everything afterwards.
+- The 100% field accepts units, for example 350 Mbit/s or 50 MB/s. A plain number still works.
+- For network counters the dialog shows the speed of the network adapter, with a button to use it as the 100% value. This is the speed of the adapter, not of your internet connection.
+
+New scale: Auto
+- DiskLED learns the highest value it sees and uses it as the full icon. The value is remembered in DiskLED.ini (LearnedMax) and falls very slowly, by half in a day.
+- The 100% value is the minimum scale. For network counters the learned value never exceeds the speed of the adapter.
+
+Changed:
+- Warnings are now measured against the scale, the value that fills the icon, not against the 100% value. With the Fixed scale nothing changes. With Peak, Decay and Auto, 80% now means 80% of the full icon.
+
+Fixed:
+- The icon and the tooltip could stop updating after Explorer restarted, the taskbar changed or Windows came back from standby. The tray icon is now added again when Windows loses it, and the counters reconnect after standby, after several unusable values in a row and when all values stay at zero for a minute.
 
 
 #### Version 2.0.0 (fork) ####

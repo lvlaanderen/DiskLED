@@ -7,14 +7,14 @@ DiskLED comes with a graphical configuration dialog that lets you choose from al
 
 This is a fork of [DiskLED by Helge Klein](https://github.com/helgeklein/DiskLED) with more icon types, colours, a second counter, warnings and other improvements, see below. Thank you, Helge, for the original.
 
-- **Download this version:** [releases](https://github.com/lvlaanderen/DiskLED/releases). Unzip it to a folder where you can write, DiskLED stores its configuration next to the executable. Use the `x64` zip on 64-bit Windows, otherwise the `x86` one.
+- **Download this version:** [releases](https://github.com/lvlaanderen/DiskLED/releases). Unzip it to a folder where you can write, DiskLED stores its configuration next to the executable. Use the `x64` zip on 64-bit Windows, otherwise the `x86` one. Earlier versions stay available on the same page.
 - **The original:** documentation and release builds of the original DiskLED can be found [here](https://helgeklein.com/free-tools/diskled/).
 
 Both versions are licensed under the Apache License 2.0, see `LICENSE`.
 
 ## Settings
 
-Everything below can be set in the config dialog (double-click the tray icon). The settings are stored in `DiskLED.ini` next to the executable when **Update the INI file when applying settings** is ticked. The dialog shows a live preview of the icon, animated with a test signal.
+Everything below can be set in the config dialog (double-click the tray icon). The settings are stored in `DiskLED.ini` next to the executable when **Update the INI file when applying settings** is ticked. The dialog has four tabs (data source, scale and values, appearance, alerts) and a live preview of the icon, animated with a test signal. It follows the Windows app theme (dark or light). **Quick pick** on the first tab sets up common data sources in one step: internet download and upload speed, disk activity, processor use and memory use. Choosing a counter fills in the value format, the scale and the 100% value for you. You can change all of them, and the 100% field accepts units such as `350 Mbit/s`.
 
 ### Icon types
 
@@ -34,9 +34,9 @@ These are stored per counter, in `[Performance Counter 1]` and `[Performance Cou
 - `Path`: the counter path. Written in English, so the INI file works on any Windows language. Paths in the system language from older versions still work.
 - `100% Utilization`: the counter value that corresponds to 100%.
 - `ValueFormat`: how values are shown in the tooltip and in the number icon: `Percent` (default), `Number`, `Bytes` (counter is bytes/s, shown as B/s, KB/s, MB/s), `Bits` (bytes/s shown as bit/s, kbit/s, Mbit/s) or `MBytes` (counter is in megabytes, shown as MB/GB/TB; with a fixed scale the tooltip also shows the total).
-- `ScaleMode`: what corresponds to the full icon. `Fixed` (default): the 100% value. `Peak`: the highest of the last 16 values. `Decay`: a peak that falls by half every 30 seconds. With `Peak` and `Decay` the `100% Utilization` value is the minimum scale. (Older versions used `AutoScale=1`, which is read as `Peak`.)
+- `ScaleMode`: what corresponds to the full icon. `Fixed` (default): the 100% value. `Peak`: the highest of the last 16 values. `Decay`: a peak that falls by half every 30 seconds. `Auto`: the highest value seen so far, learned over time and kept in the INI as `LearnedMax`; it falls by half in a day, and for network counters it never exceeds the speed of the adapter. With `Peak`, `Decay` and `Auto` the `100% Utilization` value is the minimum scale. (Older versions used `AutoScale=1`, which is read as `Peak`.)
 - `Invert`: `1` shows the 100% value minus the counter value, for example memory used from `\Memory\Available MBytes`.
-- `AlertAbove` and `AlertSeconds`: show a notification when the value stays above this percentage of the `100% Utilization` value for this many seconds. `0` turns the warning off. It is shown once per period above the threshold.
+- `AlertAbove` and `AlertSeconds`: show a notification when the value stays above this percentage of the scale (the value that fills the icon) for this many seconds. `0` turns the warning off. It is shown once per period above the threshold.
 
 ### Settings for all counters
 
