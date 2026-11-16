@@ -22,6 +22,7 @@ class CDiskLEDApp : public CWinAppEx
 {
 public:
 	CDiskLEDApp();
+	virtual ~CDiskLEDApp();
 
 	CString m_strWindowName;		// Window name for application
 	HICON   m_hIcon;				// Icon
@@ -32,8 +33,15 @@ public:
 	virtual BOOL InitInstance();
 
 // Implementation
+	BOOL IsFirstInstance ();
+
+private:
+	HANDLE	m_hSingleInstance;		// Held for as long as DiskLED runs
 
 	DECLARE_MESSAGE_MAP()
 };
 
 extern CDiskLEDApp theApp;
+
+// Registered window message: show the settings
+extern UINT g_nMsgShowSettings;

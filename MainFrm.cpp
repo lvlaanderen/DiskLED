@@ -36,6 +36,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_COMMAND(ID_POPUP_EXIT,		Shutdown)
 	ON_MESSAGE(WM_ICON_NOTIFY,		OnTrayNotification)
 	ON_MESSAGE(WM_POWERBROADCAST,	OnPowerBroadcast)
+	ON_REGISTERED_MESSAGE(g_nMsgShowSettings, OnShowSettings)
 END_MESSAGE_MAP()
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,48 +48,24 @@ END_MESSAGE_MAP()
 CMainFrame::CMainFrame()
 {
 	m_TimerID				= 0;
-	m_pTrayIcon2			= NULL;
-	m_hIcon1				= NULL;
-	m_hIcon2				= NULL;
 	m_hQuery				= NULL;
-	m_nCounters				= 1;
-	m_nIconKey				= ICONKEY_NONE;
-	m_nIconKey2				= ICONKEY_NONE;
+	m_nUpdateInterval		= DEFAULT_UPDATE_INTERVAL_MS;
 	m_nLastTooltipTick		= 0;
 	m_bPdhError				= FALSE;
-	m_bErrorShown			= FALSE;
 	m_nRetryTick			= 0;
+	m_nMeterRetryTick		= GetTickCount ();
+	m_nReconnectTick		= GetTickCount () - PDH_RETRY_MS;
 	m_nLastLearnSaveTick	= GetTickCount ();
-	m_nBadSamples			= 0;
 	m_nZeroSince			= 0;
-
-	SetDefaultSettings (m_oSettings);
-	MakeIconStyle (m_oSettings, m_oStyle);
-	SecureZeroMemory (m_aRuntime, sizeof (m_aRuntime));
-	SecureZeroMemory (m_aIcon, sizeof (m_aIcon));
 }
 
 CMainFrame::~CMainFrame()
 {
-	if (m_pTrayIcon2)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		m_pTrayIcon2->RemoveIcon ();
-		delete m_pTrayIcon2;
-		m_pTrayIcon2	= NULL;
+		delete m_aMeters[i];
 	}
-
-	// The icons are only released once the tray icons are gone
-	m_TrayIcon.RemoveIcon ();
-	if (m_hIcon1)
-	{
-		DestroyIcon (m_hIcon1);
-		m_hIcon1	= NULL;
-	}
-	if (m_hIcon2)
-	{
-		DestroyIcon (m_hIcon2);
-		m_hIcon2	= NULL;
-	}
+	m_aMeters.clear ();
 }
 
 BOOL CMainFrame::PreCreateWindow(CREATESTRUCT& cs) 
@@ -105,18 +82,15 @@ int CMainFrame::OnCreate (LPCREATESTRUCT lpCreateStruct)
 		return -1;
 	}
 
-	if (!m_TrayIcon.Create (this, WM_ICON_NOTIFY, PROGRAM_NAME, theApp.m_hIcon, IDR_POPUP_MENU))
-	{
-		return -1;
-	}
-	
 	SetWindowText(theApp.m_strWindowName);
 
 	// Read settings (from INI, if present)
-	ReadSettings ();
+	DiskLEDSettings	oSettings;
+
+	ReadSettings (oSettings);
 
 	// Initialize counters and timer. Without a message box: the counters may not be ready right after logon, the timer keeps trying.
-	Initialize (TRUE);
+	Initialize (oSettings, TRUE);
 
 	return 0;
 }
@@ -131,7 +105,7 @@ DWORD CMainFrame::StartTimer ()
 		m_TimerID	= 0;
 	}
 
-	m_TimerID	= SetTimer (ID_TIMER, m_oSettings.nUpdateInterval, (TIMERPROC) NULL);
+	m_TimerID	= SetTimer (ID_TIMER, m_nUpdateInterval, (TIMERPROC) NULL);
 
     if (! m_TimerID)
 	{
@@ -146,12 +120,17 @@ DWORD CMainFrame::StartTimer ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Close all PDH handles and reset variables etc.
+//	Close the PDH query (which frees all counters) and reset variables etc.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 DWORD CMainFrame::ClosePDH ()
 {
+	for (size_t i = 0; i < m_aMeters.size (); i++)
+	{
+		m_aMeters[i]->Disconnect ();
+	}
+
 	// Check if initialized
 	if (m_hQuery == NULL)
 	{
@@ -200,8 +179,9 @@ void CMainFrame::LogError (CString sCaller, CString sFailedComponent, DWORD nErr
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Initialize PDH (performance monitor API)
-//	With bSilent, errors are only stored in m_sLastError, otherwise they are also shown in a message box
+//	Initialize PDH (performance monitor API): open the query and add the counters of all meters
+//	A counter that cannot be added only affects its own meter (error icon, retried later). The query itself failing affects all meters.
+//	With bSilent, errors are only stored in m_sLastError, otherwise a failing counter is also shown in a message box and returned as error.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -214,7 +194,6 @@ DWORD CMainFrame::InitPDH (BOOL bSilent)
 	{
 		// Re-initialize
 		ClosePDH ();
-		m_hQuery	= NULL;
 	}
 		
 	// Open a query handle
@@ -231,43 +210,35 @@ DWORD CMainFrame::InitPDH (BOOL bSilent)
 	}
 
 	// Add the counters to the query
-	for (int i = 0; i < m_nCounters; i++)
+	DWORD	nFirstError	= ERROR_SUCCESS;
+	CString	sFirstError;
+
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		const CString&	sPath	= m_oSettings.aCounters[i].sPath;
+		CMeter*	pMeter	= m_aMeters[i];
+		CString	sError;
 
-		// Prefer the English path, which works on any system language. Older INI files contain paths in the system language.
-		nError	= PdhAddEnglishCounter (m_hQuery, sPath, 0, &m_aRuntime[i].hCounter);
-		if (nError != ERROR_SUCCESS)
+		nError	= pMeter->Connect (m_hQuery, sError);
+		if (nError == ERROR_SUCCESS)
 		{
-			nError	= PdhAddCounter (m_hQuery, sPath, 0, &m_aRuntime[i].hCounter);
-		}
-		if (nError != ERROR_SUCCESS)
-		{
-			CString	sExplanation;
-			if (nError == PDH_CSTATUS_NO_OBJECT || nError == PDH_CSTATUS_NO_COUNTER || nError == PDH_CSTATUS_BAD_COUNTERNAME)
-			{
-				sExplanation	= TEXT ("This probably means that the performance counter path is invalid: <") + sPath + TEXT (">");
-			}
-			ClosePDH ();
-			m_sLastError.Format (TEXT ("PdhAddCounter failed with 0x%x for %s"), nError, (LPCTSTR) sPath);
-			if (!bSilent)
-			{
-				LogError (TEXT ("InitPDH"), (i == 0) ? TEXT ("PdhAddCounter") : TEXT ("PdhAddCounter (second counter)"), nError, sExplanation);
-			}
-			return nError;
+			pMeter->ClearError ();
+			continue;
 		}
 
-		// The auto scale cannot learn a maximum above the speed of the network adapter
-		m_aRuntime[i].dCeiling	= 0;
-		if (m_oSettings.aCounters[i].nScaleMode == SCALEMODE_AUTO)
+		if (nFirstError == ERROR_SUCCESS)
 		{
-			double	dSpeed	= 0;
-
-			if (GetNetworkLinkSpeed (sPath, dSpeed))
-			{
-				m_aRuntime[i].dCeiling	= dSpeed;
-			}
+			nFirstError	= nError;
+			sFirstError	= sError;
 		}
+		pMeter->ShowError (sError, bSilent);
+	}
+
+	if (nFirstError != ERROR_SUCCESS && !bSilent)
+	{
+		ClosePDH ();
+		m_sLastError	= sFirstError;
+		LogError (TEXT ("InitPDH"), TEXT ("PdhAddCounter"), nFirstError, sFirstError);
+		return nFirstError;
 	}
 
 	// Get initial counter value as counter requires difference between two PdhCollectQueryData
@@ -314,7 +285,7 @@ void CMainFrame::ShowConfigurationDialog ()
 	}
 	else
 	{
-		pdlgConfig->SetFocus ();
+		pdlgConfig->SetForegroundWindow ();
 	}
 }
 
@@ -362,211 +333,46 @@ afx_msg LRESULT CMainFrame::OnPowerBroadcast(WPARAM wParam, LPARAM)
 	return 0L;
 }
 
+// DiskLED was started again: the running one shows its settings
+LRESULT CMainFrame::OnShowSettings (WPARAM, LPARAM)
+{
+	PostMessage (WM_COMMAND, ID_POPUP_CONFIGURE, 0);
+
+	return 0L;
+}
+
 LRESULT CMainFrame::OnTrayNotification(WPARAM wParam, LPARAM lParam)
 {
-	// Each tray icon ignores notifications for the other one
-	LRESULT	nResult	= m_TrayIcon.OnTrayNotification (wParam, lParam);
-
-	if (nResult == 0 && m_pTrayIcon2)
+	// Each tray icon ignores notifications for the others
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		nResult	= m_pTrayIcon2->OnTrayNotification (wParam, lParam);
-	}
+		LRESULT	nResult	= m_aMeters[i]->OnTrayNotification (wParam, lParam);
 
-	return nResult;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	The name of a counter for tooltips and alerts: the last part of its path
-//
-////////////////////////////////////////////////////////////////////////////////
-
-CString CMainFrame::GetCounterLabel (int nCounter)
-{
-	CString	sMachine;
-	CString	sObject;
-	CString	sInstance;
-	CString	sCounter;
-
-	if (!ParsePerfPath (m_oSettings.aCounters[nCounter].sPath, sMachine, sObject, sInstance, sCounter))
-	{
-		sCounter	= m_oSettings.aCounters[nCounter].sPath;
-	}
-
-	// Keep tooltips and balloons within their length limits
-	sCounter.Truncate (48);
-
-	return sCounter;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	The tooltip of the tray icon that shows several counters: the current values, and the counter names
-//
-////////////////////////////////////////////////////////////////////////////////
-
-CString CMainFrame::GetTooltipText ()
-{
-	CString	sText;
-
-	for (int i = 0; i < m_nCounters; i++)
-	{
-		const CounterSettings&	oCounter	= m_oSettings.aCounters[i];
-		CString					sValue		= FormatValue (oCounter.nValueFormat, m_aIcon[i].dValue, m_aIcon[i].dScale, oCounter.nScaleMode == SCALEMODE_FIXED);
-
-		if (m_nCounters == 1)
+		if (nResult != 0)
 		{
-			sText	= sValue + TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
-		}
-		else
-		{
-			sText	+= GetCounterLabel (i) + TEXT (": ") + sValue + TEXT ("\n");
+			return nResult;
 		}
 	}
 
-	if (m_nCounters > 1)
-	{
-		sText	+= PROGRAM_NAME;
-	}
-
-	return sText;
+	return 0;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The tooltip of one counter's own tray icon: the current value and the counter path
-//
-////////////////////////////////////////////////////////////////////////////////
-
-CString CMainFrame::GetCounterTooltip (int nCounter)
-{
-	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
-
-	return FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED)
-		+ TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	Show a balloon when a value has been above its alert threshold for the configured time
-//	The balloon is shown once per period above the threshold. Short dips below the threshold do not end the period.
-//
-////////////////////////////////////////////////////////////////////////////////
-
-void CMainFrame::CheckAlert (int nCounter)
-{
-	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
-	CounterRuntime&			oRuntime	= m_aRuntime[nCounter];
-	double					dScale		= m_aIcon[nCounter].dScale;
-
-	// The percentage is of the scale, the value that fills the icon. With the Peak, Decay and Auto scale, the 100% value is only a minimum.
-	if (oCounter.nAlertPercent <= 0 || dScale <= 0)
-	{
-		return;
-	}
-
-	double	dPercent	= m_aIcon[nCounter].dValue * 100.0 / dScale;
-	DWORD	nTick		= GetTickCount ();
-
-	if (!(dPercent >= oCounter.nAlertPercent))
-	{
-		if (oRuntime.bAbove)
-		{
-			if (!oRuntime.bBelow)
-			{
-				oRuntime.bBelow			= TRUE;
-				oRuntime.nBelowSince	= nTick;
-			}
-			else if (nTick - oRuntime.nBelowSince >= ALERT_DIP_MS)
-			{
-				// Back to normal: the next period above the threshold raises a new alert
-				oRuntime.bAbove		= FALSE;
-				oRuntime.bBelow		= FALSE;
-				oRuntime.bAlerted	= FALSE;
-			}
-		}
-		return;
-	}
-
-	oRuntime.bBelow	= FALSE;
-	if (!oRuntime.bAbove)
-	{
-		oRuntime.bAbove			= TRUE;
-		oRuntime.nAboveSince	= nTick;
-	}
-
-	if (!oRuntime.bAlerted && (ULONGLONG) (nTick - oRuntime.nAboveSince) >= (ULONGLONG) oCounter.nAlertSeconds * 1000)
-	{
-		CString	sText;
-
-		oRuntime.bAlerted	= TRUE;
-		sText.Format (TEXT ("%s: %s, above %d%% of the scale for %d s."), (LPCTSTR) GetCounterLabel (nCounter),
-			(LPCTSTR) FormatValue (oCounter.nValueFormat, m_aIcon[nCounter].dValue, m_aIcon[nCounter].dScale, oCounter.nScaleMode == SCALEMODE_FIXED),
-			oCounter.nAlertPercent, oCounter.nAlertSeconds);
-
-		// The balloon text is limited to 255 characters
-		sText.Truncate (255);
-		m_TrayIcon.ShowBalloon (sText, PROGRAM_NAME, NIIF_WARNING, 10);
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	Set a new icon on a tray icon. The tray class keeps using the icon (it re-adds it when Explorer restarts),
-//	so the previous icon is only destroyed once the new one is set.
-//
-////////////////////////////////////////////////////////////////////////////////
-
-void CMainFrame::SetTrayIcon (CSystemTray& oTray, HICON& hCurrent, HICON hNew)
-{
-	if (hNew == NULL)
-	{
-		return;
-	}
-
-	oTray.SetIcon (hNew);
-	if (hCurrent)
-	{
-		DestroyIcon (hCurrent);
-	}
-	hCurrent	= hNew;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	The counters cannot be read: show an error icon and the problem in the tooltip. The timer keeps trying to reconnect.
+//	The query cannot be used: all meters show an error icon and the problem in the tooltip. The timer keeps trying to reconnect.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 void CMainFrame::ShowErrorState (const CString& sMessage, BOOL bBalloon)
 {
-	int		nSize	= GetSystemMetrics (SM_CXSMICON);
-
 	m_bPdhError		= TRUE;
 	m_nRetryTick	= GetTickCount ();
 
-	SetTrayIcon (m_TrayIcon, m_hIcon1, (HICON) LoadImage (AfxGetResourceHandle (), MAKEINTRESOURCE (IDI_ICON6), IMAGE_ICON, nSize, nSize, 0));
-	m_TrayIcon.SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + sMessage);
-	if (m_pTrayIcon2)
+	// One balloon is enough
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		SetTrayIcon (*m_pTrayIcon2, m_hIcon2, (HICON) LoadImage (AfxGetResourceHandle (), MAKEINTRESOURCE (IDI_ICON6), IMAGE_ICON, nSize, nSize, 0));
-		m_pTrayIcon2->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + sMessage);
-	}
-
-	// Report the problem once per error period
-	if (bBalloon && !m_bErrorShown)
-	{
-		CString	sText	= sMessage + TEXT (". DiskLED keeps trying.");
-
-		sText.Truncate (255);
-		m_bErrorShown	= TRUE;
-		m_TrayIcon.ShowBalloon (sText, PROGRAM_NAME, NIIF_ERROR, 10);
+		m_aMeters[i]->ShowError (sMessage, bBalloon && i == 0);
 	}
 }
 
@@ -574,27 +380,8 @@ void CMainFrame::ShowErrorState (const CString& sMessage, BOOL bBalloon)
 void CMainFrame::ClearErrorState ()
 {
 	m_bPdhError			= FALSE;
-	m_bErrorShown		= FALSE;
-	m_nBadSamples		= 0;
 	m_nZeroSince		= 0;
-	m_nIconKey			= ICONKEY_NONE;
-	m_nIconKey2			= ICONKEY_NONE;
 	m_nLastTooltipTick	= 0;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	A sample could not be used: tolerate a few, then assume the query is stale and open a new one
-//
-////////////////////////////////////////////////////////////////////////////////
-
-void CMainFrame::SkipSample ()
-{
-	if (++m_nBadSamples >= BAD_SAMPLES_MAX)
-	{
-		Reconnect ();
-	}
 }
 
 
@@ -606,10 +393,12 @@ void CMainFrame::SkipSample ()
 
 void CMainFrame::Reconnect ()
 {
-	m_nBadSamples	= 0;
 	m_nZeroSince	= 0;
-	m_aRuntime[0].nLastTick	= 0;
-	m_aRuntime[1].nLastTick	= 0;
+	m_nReconnectTick	= GetTickCount ();
+	for (size_t i = 0; i < m_aMeters.size (); i++)
+	{
+		m_aMeters[i]->ResetSampling ();
+	}
 
 	if (InitPDH (TRUE) != ERROR_SUCCESS)
 	{
@@ -620,8 +409,39 @@ void CMainFrame::Reconnect ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Meters whose counter could not be added (e.g. a network adapter that is not there) are tried again from time to time,
+//	without disturbing the other meters
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CMainFrame::RetryFailedMeters ()
+{
+	DWORD	nTick	= GetTickCount ();
+
+	if (m_hQuery == NULL || nTick - m_nMeterRetryTick < PDH_RETRY_MS)
+	{
+		return;
+	}
+	m_nMeterRetryTick	= nTick;
+
+	for (size_t i = 0; i < m_aMeters.size (); i++)
+	{
+		CMeter*	pMeter	= m_aMeters[i];
+		CString	sError;
+
+		if (!pMeter->IsConnected () && pMeter->Connect (m_hQuery, sError) == ERROR_SUCCESS)
+		{
+			pMeter->ClearError ();
+		}
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Keep the learned maximum of the auto scale in the INI file, so it survives a restart
-//	Only an existing INI file is updated, and only when the value changed noticeably. Write errors are ignored.
+//	Only an existing INI file is updated, only the section of a meter that was saved with this counter, and only when the value changed noticeably.
+//	Write errors are ignored.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -640,22 +460,27 @@ void CMainFrame::SaveLearnedMax (BOOL bForce)
 		return;
 	}
 
-	for (int i = 0; i < m_nCounters; i++)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		CounterRuntime&	oRuntime	= m_aRuntime[i];
+		CMeter*	pMeter	= m_aMeters[i];
+		double	dLearned	= 0;
+		CString	sSection	= GetMeterSection (pMeter->GetId ());
+		CString	sPath;
 
-		if (m_oSettings.aCounters[i].nScaleMode != SCALEMODE_AUTO || !(oRuntime.dLearned > 0))
+		if (!pMeter->GetLearnedToSave (dLearned))
 		{
 			continue;
 		}
-		if (fabs (oRuntime.dLearned - oRuntime.dLearnedSaved) <= 0.02 * oRuntime.dLearned)
+
+		// The file may hold other settings than what is running now (changes that were not saved)
+		if (ReadINIValue (m_sINIFile, sSection, INI_VALUE_PATH, &sPath) != ERROR_SUCCESS || sPath.CompareNoCase (pMeter->GetSettings ().oCounter.sPath) != 0)
 		{
 			continue;
 		}
 
-		if (WriteINIValue (m_sINIFile, (i == 0) ? INI_COUNTER_1_SECTION : INI_COUNTER_2_SECTION, INI_VALUE_LEARNEDMAX, (double) oRuntime.dLearned) == ERROR_SUCCESS)
+		if (WriteINIValue (m_sINIFile, sSection, INI_VALUE_LEARNEDMAX, dLearned) == ERROR_SUCCESS)
 		{
-			oRuntime.dLearnedSaved	= oRuntime.dLearned;
+			pMeter->SetLearnedSaved (dLearned);
 		}
 	}
 }
@@ -677,7 +502,7 @@ void CMainFrame::HandlePdhError (const CString& sCaller, DWORD nError)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Timer: read the counters and update icon and tooltip
+//	Timer: read the counters and update icons and tooltips
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -708,157 +533,81 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		return;
 	}
 
+	BOOL	bAnySample	= FALSE;
 	BOOL	bAllZero	= TRUE;
+	BOOL	bStale		= FALSE;
 
-	for (int i = 0; i < m_nCounters; i++)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		const CounterSettings&	oCounter	= m_oSettings.aCounters[i];
-		CounterRuntime&			oRuntime	= m_aRuntime[i];
-		IconCounter&			oIcon		= m_aIcon[i];
-		PDH_FMT_COUNTERVALUE	oValue;
+		CMeter*	pMeter	= m_aMeters[i];
+		DWORD	nPdhError	= ERROR_SUCCESS;
 
-		// Get the counter data as floating point number. Percentage counters are not capped at 100 (e.g. a process using several cores).
-		nError	= PdhGetFormattedCounterValue (oRuntime.hCounter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, 0, &oValue);
-		if (nError != ERROR_SUCCESS)
+		if (!pMeter->IsConnected ())
 		{
-			// Let's have a look at the error message
-			if (nError == PDH_CALC_NEGATIVE_VALUE || nError == PDH_CALC_NEGATIVE_DENOMINATOR || nError == PDH_CALC_NEGATIVE_TIMEBASE)
-			{
-				// This (PDH_CALC_NEGATIVE_VALUE) happens on Windows 7 RTM if a USB flash drive is inserted.
-				// The algorithm probably has a bug in that it returns a negative value because of the additional disk which cannot be converted to LONG.
-				// A single such sample is ignored, a persistent one means the query is stale.
-				SkipSample ();
-				return;
-			}
-			else
-			{
-				HandlePdhError (TEXT ("PdhGetFormattedCounterValue"), nError);
-				return;
-			}
+			continue;
 		}
 
-		// The call can succeed with a value that is not valid (e.g. the network adapter instance is gone)
-		if (oValue.CStatus != PDH_CSTATUS_VALID_DATA && oValue.CStatus != PDH_CSTATUS_NEW_DATA)
+		int		nResult	= pMeter->Update (nTick, m_nUpdateInterval, nPdhError);
+
+		if (nResult == SAMPLE_ERROR)
 		{
-			SkipSample ();
+			HandlePdhError (TEXT ("PdhGetFormattedCounterValue"), nPdhError);
 			return;
 		}
-
-		double	dValue	= oValue.doubleValue;
-		if (oCounter.bInvert)
+		if (nResult == SAMPLE_OK)
 		{
-			dValue	= oCounter.d100Percent - dValue;
-		}
-		if (!(dValue > 0))
-		{
-			// Also catches NaN
-			dValue	= 0;
-		}
-		if (dValue > 0)
-		{
-			bAllZero	= FALSE;
-		}
-
-		// Remember the sample (oldest first)
-		memmove (oIcon.adHistory, oIcon.adHistory + 1, (HISTORY_SIZE - 1) * sizeof (double));
-		oIcon.adHistory[HISTORY_SIZE - 1]	= dValue;
-		oIcon.dValue						= dValue;
-		oIcon.nValueFormat					= oCounter.nValueFormat;
-
-		// The scale is the value that corresponds to the full icon. The 100% value is the minimum.
-		double	dScale	= oCounter.d100Percent;
-		if (oCounter.nScaleMode == SCALEMODE_PEAK)
-		{
-			for (int j = 0; j < HISTORY_SIZE; j++)
+			bAnySample	= TRUE;
+			if (pMeter->GetValue () > 0)
 			{
-				if (oIcon.adHistory[j] > dScale)
-				{
-					dScale	= oIcon.adHistory[j];
-				}
+				bAllZero	= FALSE;
 			}
 		}
-		else if (oCounter.nScaleMode == SCALEMODE_DECAY)
+		else if (pMeter->GetBadSamples () >= BAD_SAMPLES_MAX)
 		{
-			// The peak falls by half every DECAY_HALFLIFE_MS (measured, the timer is not exact), a higher value becomes the new peak
-			DWORD	nElapsed	= (oRuntime.nLastTick != 0) ? nTick - oRuntime.nLastTick : m_oSettings.nUpdateInterval;
-			if (nElapsed > 60000)
-			{
-				nElapsed	= 60000;
-			}
-
-			double	dDecayed	= oRuntime.dDecayPeak * pow (0.5, (double) nElapsed / DECAY_HALFLIFE_MS);
-			oRuntime.dDecayPeak	= (dValue > dDecayed) ? dValue : dDecayed;
-			if (oRuntime.dDecayPeak > dScale)
-			{
-				dScale	= oRuntime.dDecayPeak;
-			}
+			// A persistent problem means the query is stale
+			bStale	= TRUE;
 		}
-		else if (oCounter.nScaleMode == SCALEMODE_AUTO)
-		{
-			// The learned maximum rises with every new high and falls very slowly. Nothing above the adapter speed can be real.
-			DWORD	nElapsed	= (oRuntime.nLastTick != 0) ? nTick - oRuntime.nLastTick : m_oSettings.nUpdateInterval;
-			if (nElapsed > 60000)
-			{
-				nElapsed	= 60000;
-			}
-
-			double	dLearned	= oRuntime.dLearned * pow (0.5, (double) nElapsed / LEARN_HALFLIFE_MS);
-			double	dSample		= dValue;
-			if (oRuntime.dCeiling > 0)
-			{
-				dSample		= (dSample > oRuntime.dCeiling) ? oRuntime.dCeiling : dSample;
-				dLearned	= (dLearned > oRuntime.dCeiling) ? oRuntime.dCeiling : dLearned;
-			}
-			if (dSample > dLearned)
-			{
-				dLearned	= dSample;
-			}
-
-			oRuntime.dLearned						= dLearned;
-			m_oSettings.aCounters[i].dLearnedMax	= dLearned;
-			if (dLearned > dScale)
-			{
-				dScale	= dLearned;
-			}
-		}
-		oRuntime.nLastTick	= nTick;
-		oIcon.dScale		= dScale;
-
-		CheckAlert (i);
 	}
 
-	// A usable sample
-	m_nBadSamples	= 0;
-
-	// Counters that read zero for a long time may be stale: open a new query
-	if (!bAllZero)
-	{
-		m_nZeroSince	= 0;
-	}
-	else if (m_nZeroSince == 0)
-	{
-		m_nZeroSince	= nTick;
-	}
-	else if (nTick - m_nZeroSince >= STALE_ZERO_MS)
+	// Not more often than the retry time, a counter that cannot recover must not keep the query busy
+	if (bStale && nTick - m_nReconnectTick >= PDH_RETRY_MS)
 	{
 		Reconnect ();
-		if (m_hQuery == NULL)
+		return;
+	}
+
+	// Counters that read zero for a long time may be stale: open a new query
+	if (bAnySample)
+	{
+		if (!bAllZero)
 		{
-			return;
+			m_nZeroSince	= 0;
+		}
+		else if (m_nZeroSince == 0)
+		{
+			m_nZeroSince	= nTick;
+		}
+		else if (nTick - m_nZeroSince >= STALE_ZERO_MS)
+		{
+			Reconnect ();
+			if (m_hQuery == NULL)
+			{
+				return;
+			}
 		}
 	}
 
-	// Update the icon(s). Icons are only redrawn when what they show changes.
-	UpdateTrayIcons ();
+	// Update the icons and tooltips. Icons are only redrawn when what they show changes, the tooltips are throttled (the shell does not need to be updated on every tick).
+	BOOL	bTooltips	= (nTick - m_nLastTooltipTick >= TOOLTIP_UPDATE_MS);
 
-	// Show the current value in the tooltip (throttled, the shell does not need to be updated on every tick)
-	if (nTick - m_nLastTooltipTick >= TOOLTIP_UPDATE_MS)
+	if (bTooltips)
 	{
 		m_nLastTooltipTick	= nTick;
-		UpdateTooltips ();
 	}
+	UpdateMeters (bTooltips);
 
 	SaveLearnedMax (FALSE);
+	RetryFailedMeters ();
 
 	// Call the parent class's function
 	CFrameWnd::OnTimer (nIDEvent);
@@ -867,58 +616,26 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Update the tray icon(s)
+//	Update the tray icons (and tooltips) of the meters that work
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CMainFrame::UpdateTrayIcons ()
+void CMainFrame::UpdateMeters (BOOL bTooltips)
 {
-	int		nSize	= GetSystemMetrics (SM_CXSMICON);
-
-	if (m_pTrayIcon2)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		// One icon per counter
-		DWORD	nKey1	= GetIconKey (m_oStyle, &m_aIcon[0], 1, nSize);
-		DWORD	nKey2	= GetIconKey (m_oStyle, &m_aIcon[1], 1, nSize);
+		CMeter*	pMeter	= m_aMeters[i];
 
-		if (nKey1 != m_nIconKey)
+		if (!pMeter->IsConnected () || pMeter->HasError ())
 		{
-			SetTrayIcon (m_TrayIcon, m_hIcon1, CreateTrayIconImage (m_oStyle, &m_aIcon[0], 1));
-			m_nIconKey	= nKey1;
+			continue;
 		}
-		if (nKey2 != m_nIconKey2)
+
+		pMeter->UpdateIcon ();
+		if (bTooltips)
 		{
-			SetTrayIcon (*m_pTrayIcon2, m_hIcon2, CreateTrayIconImage (m_oStyle, &m_aIcon[1], 1));
-			m_nIconKey2	= nKey2;
+			pMeter->UpdateTooltip ();
 		}
-		return;
-	}
-
-	DWORD	nKey	= GetIconKey (m_oStyle, m_aIcon, m_nCounters, nSize);
-	if (nKey != m_nIconKey)
-	{
-		SetTrayIcon (m_TrayIcon, m_hIcon1, CreateTrayIconImage (m_oStyle, m_aIcon, m_nCounters));
-		m_nIconKey	= nKey;
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	Update the tooltip(s) with the current values
-//
-////////////////////////////////////////////////////////////////////////////////
-
-void CMainFrame::UpdateTooltips ()
-{
-	if (m_pTrayIcon2)
-	{
-		m_TrayIcon.SetTooltipText (GetCounterTooltip (0));
-		m_pTrayIcon2->SetTooltipText (GetCounterTooltip (1));
-	}
-	else
-	{
-		m_TrayIcon.SetTooltipText (GetTooltipText ());
 	}
 }
 
@@ -928,16 +645,11 @@ void CMainFrame::OnClose()
 	SaveLearnedMax (TRUE);
 
 	// Clean up the PDH variables
-	if (m_hQuery)
-	{
-		PdhCloseQuery (m_hQuery);
-		m_hQuery	= NULL;
-	}
+	ClosePDH ();
 
-	m_TrayIcon.RemoveIcon();
-	if (m_pTrayIcon2)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		m_pTrayIcon2->RemoveIcon ();
+		m_aMeters[i]->RemoveTrayIcon ();
 	}
 	
 	// Call the parent class's function
@@ -951,86 +663,66 @@ void CMainFrame::OnClose()
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-DWORD CMainFrame::ReadSettings ()
+DWORD CMainFrame::ReadSettings (DiskLEDSettings& oSettings)
 {
-	DWORD	nError	= ERROR_INVALID_FUNCTION;
+	// The INI file. This also moves the file of an older version from the installation folder to its new place.
+	m_sINIFile	= GetSettingsFile ();
 
-	// Determine and store the path to our executable and the installation directory
-	nError	=  GetModuleFileName(NULL, m_sExecutablePath.GetBuffer (MAX_PATH), MAX_PATH);
-	m_sExecutablePath.ReleaseBuffer ();
-	if (nError == 0)
-	{
-		return ERROR_INVALID_FUNCTION;
-	}
-	m_sInstallationDirectory	=	m_sExecutablePath.Left (m_sExecutablePath.ReverseFind('\\'));
-
-	// Build the path to the INI file
-	m_sINIFile	= m_sInstallationDirectory + TEXT ("\\") + INI_SETTINGS_FILE;
-
-	return LoadSettings (m_sINIFile, m_oSettings);
+	return LoadSettings (m_sINIFile, oSettings);
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Initialize the performance counters and the timer
+//	Use the settings: create the meters (a meter with the same number is kept, with its tray icon), initialize the counters and start the timer
 //	If the counters cannot be read, the timer keeps running and tries again
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-DWORD CMainFrame::Initialize (BOOL bSilent)
+DWORD CMainFrame::Initialize (const DiskLEDSettings& oSettings, BOOL bSilent)
 {
-	DWORD	nError	= ERROR_INVALID_FUNCTION;
+	DWORD			nError	= ERROR_INVALID_FUNCTION;
+	DiskLEDSettings	oNormalized	= oSettings;
 
-	NormalizeSettings (m_oSettings);
-	MakeIconStyle (m_oSettings, m_oStyle);
-	m_nCounters	= m_oSettings.bSecondCounter ? 2 : 1;
+	NormalizeSettings (oNormalized);
+	m_nUpdateInterval	= oNormalized.nUpdateInterval;
 
-	// The number icon gets its own tray icon for each counter
-	if (UsesSeparateIcons (m_oSettings.nIconType, m_nCounters))
+	// The query is opened again below, all counters are added again
+	ClosePDH ();
+
+	std::vector<CMeter*>	aMeters;
+
+	for (size_t i = 0; i < oNormalized.aMeters.size (); i++)
 	{
-		if (m_pTrayIcon2 == NULL)
+		const MeterSettings&	oMeter	= oNormalized.aMeters[i];
+		CMeter*					pMeter	= NULL;
+
+		for (size_t j = 0; j < m_aMeters.size () && pMeter == NULL; j++)
 		{
-			m_pTrayIcon2	= new CSystemTray;
-			if (!m_pTrayIcon2->Create (this, WM_ICON_NOTIFY, PROGRAM_NAME, theApp.m_hIcon, IDR_POPUP_MENU2))
+			if (m_aMeters[j] != NULL && m_aMeters[j]->GetId () == oMeter.nId)
 			{
-				delete m_pTrayIcon2;
-				m_pTrayIcon2	= NULL;
+				pMeter			= m_aMeters[j];
+				m_aMeters[j]	= NULL;
+				pMeter->SetSettings (oMeter, m_nUpdateInterval);
+				pMeter->ClearError ();
 			}
 		}
 
-		// Without a second tray icon only the first counter is shown, two numbers do not fit in one icon
-		if (m_pTrayIcon2 == NULL)
+		if (pMeter == NULL)
 		{
-			m_nCounters	= 1;
+			pMeter	= new CMeter (this, oMeter, m_nUpdateInterval);
+			pMeter->Create ();
 		}
-	}
-	else if (m_pTrayIcon2)
-	{
-		m_pTrayIcon2->RemoveIcon ();
-		delete m_pTrayIcon2;
-		m_pTrayIcon2	= NULL;
-		if (m_hIcon2)
-		{
-			DestroyIcon (m_hIcon2);
-			m_hIcon2	= NULL;
-		}
+		aMeters.push_back (pMeter);
 	}
 
-	// Start without history
-	for (int i = 0; i < 2; i++)
+	// The meters that are no longer there remove their tray icons
+	for (size_t j = 0; j < m_aMeters.size (); j++)
 	{
-		SecureZeroMemory (&m_aRuntime[i], sizeof (m_aRuntime[i]));
-		SecureZeroMemory (&m_aIcon[i], sizeof (m_aIcon[i]));
-		m_aIcon[i].dScale		= m_oSettings.aCounters[i].d100Percent;
-		m_aIcon[i].nValueFormat	= m_oSettings.aCounters[i].nValueFormat;
-		m_aRuntime[i].dLearned		= m_oSettings.aCounters[i].dLearnedMax;
-		m_aRuntime[i].dLearnedSaved	= m_oSettings.aCounters[i].dLearnedMax;
-		if (m_oSettings.aCounters[i].nScaleMode == SCALEMODE_AUTO && m_aRuntime[i].dLearned > m_aIcon[i].dScale)
-		{
-			m_aIcon[i].dScale	= m_aRuntime[i].dLearned;
-		}
+		delete m_aMeters[j];
 	}
+	m_aMeters	= aMeters;
+
 	ClearErrorState ();
 
 	// Init PDH
@@ -1048,17 +740,14 @@ DWORD CMainFrame::Initialize (BOOL bSilent)
 	// Start the timer
 	nError	= StartTimer ();
 
-	// Set a new info tip including the counter path(s)
-	if (m_pTrayIcon2)
+	// Set a new info tip including the counter path
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		m_TrayIcon.SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + m_oSettings.aCounters[0].sPath);
-		m_pTrayIcon2->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + m_oSettings.aCounters[1].sPath);
-		return nError;
+		if (!m_aMeters[i]->HasError ())
+		{
+			m_aMeters[i]->SetInitialTooltip ();
+		}
 	}
-
-	CString	sToolTipText	= PROGRAM_NAME;
-	sToolTipText			+= TEXT (" - ") + ((m_nCounters == 1) ? m_oSettings.aCounters[0].sPath : GetCounterLabel (0) + TEXT (" / ") + GetCounterLabel (1));
-	m_TrayIcon.SetTooltipText (sToolTipText);
 
 	return nError;
 }
@@ -1066,13 +755,18 @@ DWORD CMainFrame::Initialize (BOOL bSilent)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The current settings
+//	The current settings (including what the auto scale has learned meanwhile)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 void CMainFrame::GetSettings (DiskLEDSettings& oSettings)
 {
-	oSettings	= m_oSettings;
+	oSettings.nUpdateInterval	= m_nUpdateInterval;
+	oSettings.aMeters.clear ();
+	for (size_t i = 0; i < m_aMeters.size (); i++)
+	{
+		oSettings.aMeters.push_back (m_aMeters[i]->GetSettings ());
+	}
 }
 
 
@@ -1084,24 +778,14 @@ void CMainFrame::GetSettings (DiskLEDSettings& oSettings)
 
 DWORD CMainFrame::ApplySettings (const DiskLEDSettings& oSettings)
 {
-	DiskLEDSettings	oPrevious	= m_oSettings;
+	DiskLEDSettings	oPrevious;
 
-	m_oSettings	= oSettings;
+	GetSettings (oPrevious);
 
-	// The dialog works on a copy: do not lose what was learned meanwhile
-	for (int i = 0; i < 2; i++)
-	{
-		if (oSettings.aCounters[i].sPath.CompareNoCase (oPrevious.aCounters[i].sPath) == 0 && oPrevious.aCounters[i].dLearnedMax > m_oSettings.aCounters[i].dLearnedMax)
-		{
-			m_oSettings.aCounters[i].dLearnedMax	= oPrevious.aCounters[i].dLearnedMax;
-		}
-	}
-
-	DWORD	nError	= Initialize (FALSE);
+	DWORD	nError	= Initialize (oSettings, FALSE);
 	if (nError != ERROR_SUCCESS)
 	{
-		m_oSettings	= oPrevious;
-		Initialize (TRUE);
+		Initialize (oPrevious, TRUE);
 	}
 
 	return nError;

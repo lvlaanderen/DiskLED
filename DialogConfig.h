@@ -31,8 +31,9 @@ protected:
 
 private:
 	// Control object variables
-	CComboBox	m_cCounterSel;
-	CButton		m_cSecondCounter;
+	CComboBox	m_cCounterSel;			// The meters: the settings controls show the one selected
+	CButton		m_cAddMeter;
+	CButton		m_cRemoveMeter;
 	CComboBox	m_cIconType;
 	CComboBox	m_cValueFormat;
 	CComboBox	m_cScaleMode;
@@ -63,10 +64,8 @@ private:
 	CEdit		m_cSelectPerfDescription;
 
 	// Control value variables
-	int			m_nCounterSel;			// Which counter the counter settings controls show: 0 or 1
+	int			m_nCounterSel;			// Which meter the settings controls show (index into m_oSettings.aMeters)
 	int			m_nTab;					// The page shown: 0 data source, 1 scale, 2 appearance, 3 alerts
-	BOOL		m_bSecondCounterSeeded;	// The second counter already got the first counter's settings as a starting point
-	int			m_nSecondCounter;
 	int			m_nLEDType;				// Icon type - 1
 	int			m_nValueFormat;			// Value format - 1
 	int			m_nScaleMode;			// Scale mode - 1
@@ -96,14 +95,13 @@ private:
 	CMainFrame*		m_pMainFrame;
 	CString			m_sSelectedPerfPath;
 
-	// The settings being edited. The counter settings controls show the counter selected in m_nCounterSel,
-	// the other counter's settings are kept here until it is selected.
+	// The settings being edited. The controls show the meter selected in m_nCounterSel,
+	// the settings of the other meters are kept here until they are selected.
 	DiskLEDSettings	m_oSettings;
 
 	// Preview
 	IconStyle		m_oPreviewStyle;
-	IconCounter		m_aPreview[2];
-	int				m_nPreviewCounters;
+	IconCounter		m_oPreview;
 	double			m_dPreviewTime;
 
 	// Memory buffers for PdhEnumObjectItems
@@ -121,8 +119,11 @@ private:
 	BOOL		ApplySettings ();
 	void		LoadGlobalToControls ();
 	void		SaveGlobalFromControls ();
-	void		LoadCounterToControls (int nCounter);
-	void		SaveControlsToCounter (int nCounter);
+	void		LoadMeterToControls (int nMeter);
+	void		SaveControlsToMeter (int nMeter);
+	void		FillMeterList ();
+	void		UpdateMeterButtons ();
+	void		SwitchMeter (int nNew);
 	void		UpdateSwatches ();
 	void		UpdatePreview ();
 	BOOL		Read100Percent ();
@@ -150,6 +151,8 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnCbnSelchangeCounterSel();
+	afx_msg void OnBnClickedAddMeter();
+	afx_msg void OnBnClickedRemoveMeter();
 	afx_msg void OnTcnSelchangeTab(NMHDR* pNMHDR, LRESULT* pResult);
 	afx_msg void OnCbnSelchangeValueFormat();
 	afx_msg void OnCbnSelchangeScaleMode();

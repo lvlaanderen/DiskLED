@@ -116,9 +116,10 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_CAPTION | WS_SYSMENU
 CAPTION "DiskLED Configuration"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    LTEXT           "Settings for:",IDC_STATIC,7,9,44,8
-    COMBOBOX        IDC_COMBO_COUNTERSEL,53,7,60,40,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Use a seco&nd counter",IDC_CHECK_COUNTER2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,9,110,10
+    LTEXT           "Meter:",IDC_STATIC,7,9,24,8
+    COMBOBOX        IDC_COMBO_COUNTERSEL,33,7,130,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Add meter",IDC_ADD_METER,170,6,56,14
+    PUSHBUTTON      "&Remove",IDC_REMOVE_METER,230,6,50,14
     CONTROL         "",IDC_TAB_MAIN,"SysTabControl32",WS_TABSTOP,7,30,316,12
     LTEXT           "Icon type:",IDC_LABEL_ICONTYPE,331,9,82,8
     COMBOBOX        IDC_COMBO_ICONTYPE,331,20,82,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
@@ -256,17 +257,6 @@ BEGIN
     END
 END
 
-IDR_POPUP_MENU2 MENU 
-BEGIN
-    POPUP "POPUP_MENU"
-    BEGIN
-        MENUITEM "&Configure...",               ID_POPUP_CONFIGURE
-        MENUITEM "&About DiskLED...",           ID_POPUP_ABOUT
-        MENUITEM SEPARATOR
-        MENUITEM "&Exit",                       ID_POPUP_EXIT
-    END
-END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -318,13 +308,14 @@ BEGIN
     IDS_TOOLTIP_INVERT      "Show the 100% value minus the counter value, e.g. memory used from a counter that reports memory available."
     IDS_TOOLTIP_COLORS      "Low, mid and high colour. Click to change. Used by all icon types (the LED uses the low colour)."
     IDS_TOOLTIP_THRESHOLDS  "Where the mid and the high colour start, in % of the scale (the 100% value, or the peak with the Peak and Decay scale)."
-    IDS_TOOLTIP_AUTOSTART   "Start this copy of DiskLED when you log on to Windows. Adds a Startup entry for the current user, no admin rights needed."
+    IDS_TOOLTIP_AUTOSTART   "Start DiskLED when you log on to Windows. Adds a Startup entry for the current user, no admin rights needed."
     IDS_TOOLTIP_VALUEFORMAT "How to show the current value in the icon's tooltip. Use Bytes/s or Bits/s for counters measured in bytes per second, MBytes for counters measured in megabytes."
     IDS_TOOLTIP_UPDATE_FREQUENCY 
                             "How often to update the display (in milliseconds)"
     IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). Auto: the highest value DiskLED has seen, remembered in the INI file and falling very slowly (halves in a day). With Peak, Decay and Auto the 100% value is the minimum."
-    IDS_TOOLTIP_COUNTERSEL  "Which counter the settings below belong to. With a second counter, each counter has its own data source, 100% value, format, scale and warning."
-    IDS_TOOLTIP_COUNTER2    "Show a second counter in the same icon: side by side for the bar types, one above the other for the graph. The number icon gets a second tray icon instead."
+    IDS_TOOLTIP_COUNTERSEL  "The meters. Each meter is one tray icon with its own data source, 100% value, format, scale, icon and warning. The settings below belong to the meter shown here."
+    IDS_TOOLTIP_ADD_METER   "Add a meter (a tray icon). It starts as a copy of the meter shown, change its data source below."
+    IDS_TOOLTIP_REMOVE_METER "Remove the meter that is shown, and its tray icon."
     IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the scale (the value that fills the icon) for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_UPDATE_INI  "Update the INI configuration file when applying settings?"
     IDS_TOOLTIP_DEFAULT_VALUES "Restore default values?"

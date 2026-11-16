@@ -22,11 +22,8 @@ struct IconCounter
 	double		adHistory[HISTORY_SIZE];	// Recent values, oldest first
 };
 
-void	MakeIconStyle (const DiskLEDSettings& oSettings, IconStyle& oStyle);
+void	MakeIconStyle (const MeterSettings& oMeter, IconStyle& oStyle);
 int		GetColorIndex (const IconStyle& oStyle, double dNormalized);
-
-// The number icon is too small to share between two counters: each counter gets its own tray icon
-BOOL	UsesSeparateIcons (DWORD nIconType, int nCounters);
 
 // Split a value into a displayable number and its unit (full unit for the tooltip, one character for the icon)
 void	GetValueParts (DWORD nValueFormat, double dValue, double dScale, double& dNumber, CString& sUnit, CString& sIconUnit);

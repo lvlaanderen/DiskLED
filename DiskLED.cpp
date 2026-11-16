@@ -6,6 +6,7 @@
 #include "DiskLED.h"
 #include "MainFrm.h"
 #include "DarkMode.h"
+#include "Helpers.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -21,9 +22,21 @@ END_MESSAGE_MAP()
 
 // CDiskLEDApp construction
 
+// Sent to the running DiskLED when it is started again, so it shows its settings
+UINT g_nMsgShowSettings	= ::RegisterWindowMessage (TEXT ("DiskLED.ShowSettings"));
+
 CDiskLEDApp::CDiskLEDApp()
 {
 	m_strWindowName		= TEXT ("DiskLED");		// Window/Application name
+	m_hSingleInstance	= NULL;
+}
+
+CDiskLEDApp::~CDiskLEDApp()
+{
+	if (m_hSingleInstance)
+	{
+		CloseHandle (m_hSingleInstance);
+	}
 }
 
 
@@ -32,10 +45,41 @@ CDiskLEDApp::CDiskLEDApp()
 CDiskLEDApp theApp;
 
 
+// There is one DiskLED per user, with all the meters. Returns FALSE if it is already running (it is asked to show its settings).
+BOOL CDiskLEDApp::IsFirstInstance ()
+{
+	m_hSingleInstance	= CreateMutex (NULL, FALSE, TEXT ("Local\\DiskLED.SingleInstance"));
+	if (m_hSingleInstance != NULL && GetLastError () != ERROR_ALREADY_EXISTS)
+	{
+		return TRUE;
+	}
+	if (m_hSingleInstance == NULL)
+	{
+		// Cannot tell, run anyway
+		return TRUE;
+	}
+
+	// A copy of an older version in another folder may have left its own autostart entry: remove it, or the program would ask for the settings at every logon
+	RemoveLegacyAutoStartEntry ();
+
+	// The user started DiskLED, so Windows lets the running instance come to the foreground
+	AllowSetForegroundWindow (ASFW_ANY);
+	PostMessage (HWND_BROADCAST, g_nMsgShowSettings, 0, 0);
+
+	return FALSE;
+}
+
+
 // CDiskLEDApp initialization
 
 BOOL CDiskLEDApp::InitInstance()
 {
+	if (!IsFirstInstance ())
+	{
+		return FALSE;
+	}
+	MigrateAutoStart ();
+
 	// InitCommonControlsEx() is required on Windows XP if an application
 	// manifest specifies use of ComCtl32.dll version 6 or later to enable
 	// visual styles.  Otherwise, any window creation will fail.

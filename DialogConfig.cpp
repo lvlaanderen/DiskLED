@@ -14,7 +14,7 @@
 IMPLEMENT_DYNAMIC(CDialogConfig, CDialog)
 
 CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::IDD, pMainFrame)
-														, m_nCounterSel(0), m_nSecondCounter(0)
+														, m_nCounterSel(0)
 														, m_nLEDType(0), m_nUpdateFrequency(0)
 														, m_nValueFormat(0), m_nScaleMode(0), m_nInvert(0), m_nAutoStart(0)
 														, m_nAlertPercent(0), m_nAlertSeconds(0)
@@ -28,7 +28,6 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_sPerfCounter(_T(""))
 														, m_sPerfInstance(_T(""))
 														, m_sPerfDescription(_T(""))
-														, m_nPreviewCounters(1)
 														, m_dPreviewTime(0)
 {
 	if (pMainFrame)
@@ -41,10 +40,9 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 	}
 
 	SetDefaultSettings (m_oSettings);
-	m_bSecondCounterSeeded	= FALSE;
 	SecureZeroMemory (m_anColors, sizeof (m_anColors));
 	SecureZeroMemory (&m_oPreviewStyle, sizeof (m_oPreviewStyle));
-	SecureZeroMemory (m_aPreview, sizeof (m_aPreview));
+	SecureZeroMemory (&m_oPreview, sizeof (m_oPreview));
 
 	// Memory buffers for PdhEnumObjectItems
 	m_sBufferCounters	= NULL;
@@ -82,8 +80,8 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 
 	DDX_Control(pDX, IDC_COMBO_COUNTERSEL, m_cCounterSel);
 	DDX_CBIndex(pDX, IDC_COMBO_COUNTERSEL, m_nCounterSel);
-	DDX_Control(pDX, IDC_CHECK_COUNTER2, m_cSecondCounter);
-	DDX_Check(pDX, IDC_CHECK_COUNTER2, m_nSecondCounter);
+	DDX_Control(pDX, IDC_ADD_METER, m_cAddMeter);
+	DDX_Control(pDX, IDC_REMOVE_METER, m_cRemoveMeter);
 	DDX_Control(pDX, IDC_COMBO_ICONTYPE, m_cIconType);
 	DDX_CBIndex(pDX, IDC_COMBO_ICONTYPE, m_nLEDType);
 	DDX_Control(pDX, IDC_COMBO_VALUEFORMAT, m_cValueFormat);
@@ -161,6 +159,8 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
 	ON_CBN_SELCHANGE(IDC_COMBO_COUNTERSEL, &CDialogConfig::OnCbnSelchangeCounterSel)
+	ON_BN_CLICKED(IDC_ADD_METER, &CDialogConfig::OnBnClickedAddMeter)
+	ON_BN_CLICKED(IDC_REMOVE_METER, &CDialogConfig::OnBnClickedRemoveMeter)
 	ON_CBN_SELCHANGE(IDC_COMBO_VALUEFORMAT, &CDialogConfig::OnCbnSelchangeValueFormat)
 	ON_CBN_SELCHANGE(IDC_COMBO_SCALEMODE, &CDialogConfig::OnCbnSelchangeScaleMode)
 	ON_CBN_SELCHANGE(IDC_PERF_OBJECTS, &CDialogConfig::OnCbnSelchangePerfObjects)
@@ -244,33 +244,27 @@ void CDialogConfig::OnTcnSelchangeTab (NMHDR*, LRESULT* pResult)
 
 void CDialogConfig::LoadGlobalToControls ()
 {
-	m_nLEDType			= m_oSettings.nIconType - 1;
 	m_nUpdateFrequency	= m_oSettings.nUpdateInterval;
-	m_nSecondCounter	= m_oSettings.bSecondCounter ? 1 : 0;
-	m_nThresholdMid		= m_oSettings.nThresholdMid;
-	m_nThresholdHigh	= m_oSettings.nThresholdHigh;
-	for (int i = 0; i < 3; i++)
-	{
-		m_anColors[i]	= m_oSettings.anColors[i];
-	}
 }
 
 void CDialogConfig::SaveGlobalFromControls ()
 {
-	m_oSettings.nIconType		= m_nLEDType + 1;
 	m_oSettings.nUpdateInterval	= m_nUpdateFrequency;
-	m_oSettings.bSecondCounter	= (m_nSecondCounter != 0);
-	m_oSettings.nThresholdMid	= m_nThresholdMid;
-	m_oSettings.nThresholdHigh	= m_nThresholdHigh;
-	for (int i = 0; i < 3; i++)
-	{
-		m_oSettings.anColors[i]	= m_anColors[i];
-	}
 }
 
-void CDialogConfig::LoadCounterToControls (int nCounter)
+// The meter: its icon look and its counter
+void CDialogConfig::LoadMeterToControls (int nMeter)
 {
-	const CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
+	const MeterSettings&	oMeter		= m_oSettings.aMeters[nMeter];
+	const CounterSettings&	oCounter	= oMeter.oCounter;
+
+	m_nLEDType			= oMeter.nIconType - 1;
+	m_nThresholdMid		= oMeter.nThresholdMid;
+	m_nThresholdHigh	= oMeter.nThresholdHigh;
+	for (int i = 0; i < 3; i++)
+	{
+		m_anColors[i]	= oMeter.anColors[i];
+	}
 
 	m_sCounterPath		= EnglishPathToLocal (oCounter.sPath);
 	m_d100Percent		= oCounter.d100Percent;
@@ -283,9 +277,18 @@ void CDialogConfig::LoadCounterToControls (int nCounter)
 	m_nAlertSeconds		= oCounter.nAlertSeconds;
 }
 
-void CDialogConfig::SaveControlsToCounter (int nCounter)
+void CDialogConfig::SaveControlsToMeter (int nMeter)
 {
-	CounterSettings&	oCounter	= m_oSettings.aCounters[nCounter];
+	MeterSettings&		oMeter		= m_oSettings.aMeters[nMeter];
+	CounterSettings&	oCounter	= oMeter.oCounter;
+
+	oMeter.nIconType		= m_nLEDType + 1;
+	oMeter.nThresholdMid	= m_nThresholdMid;
+	oMeter.nThresholdHigh	= m_nThresholdHigh;
+	for (int i = 0; i < 3; i++)
+	{
+		oMeter.anColors[i]	= m_anColors[i];
+	}
 
 	oCounter.sPath			= m_sCounterPath.IsEmpty () ? m_sCounterPath : LocalPathToEnglish (m_sCounterPath);
 	oCounter.d100Percent	= m_d100Percent;
@@ -396,7 +399,7 @@ void CDialogConfig::RefreshScaleControls ()
 
 void CDialogConfig::ApplyCounterDefaults ()
 {
-	CounterSettings	oCounter	= m_oSettings.aCounters[m_nCounterSel];
+	CounterSettings	oCounter	= m_oSettings.aMeters[m_nCounterSel].oCounter;
 
 	GetCounterDefaults (LocalPathToEnglish (m_sCounterPath), oCounter);
 
@@ -408,7 +411,7 @@ void CDialogConfig::ApplyCounterDefaults ()
 	m_s100PercentShown	= m_s100Percent;
 
 	// What was learned belongs to the previous data source
-	m_oSettings.aCounters[m_nCounterSel].dLearnedMax	= 0;
+	m_oSettings.aMeters[m_nCounterSel].oCounter.dLearnedMax	= 0;
 }
 
 
@@ -555,7 +558,8 @@ BOOL CDialogConfig::OnInitDialog ()
 	if (m_oToolTip.Create (this))
 	{
 		m_oToolTip.AddTool (&m_cCounterSel, IDS_TOOLTIP_COUNTERSEL);
-		m_oToolTip.AddTool (&m_cSecondCounter, IDS_TOOLTIP_COUNTER2);
+		m_oToolTip.AddTool (&m_cAddMeter, IDS_TOOLTIP_ADD_METER);
+		m_oToolTip.AddTool (&m_cRemoveMeter, IDS_TOOLTIP_REMOVE_METER);
 		m_oToolTip.AddTool (&m_cIconType, IDS_TOOLTIP_ICONTYPE);
 		m_oToolTip.AddTool (&m_cValueFormat, IDS_TOOLTIP_VALUEFORMAT);
 		m_oToolTip.AddTool (&m_cScaleMode, IDS_TOOLTIP_SCALEMODE);
@@ -586,9 +590,7 @@ BOOL CDialogConfig::OnInitDialog ()
 		m_oToolTip.AddTool (&m_cUpdateFrequencyText2, IDS_TOOLTIP_UPDATE_FREQUENCY);
 	}
 
-	// Counter selection entries
-	m_cCounterSel.AddString (TEXT ("Counter 1"));
-	m_cCounterSel.AddString (TEXT ("Counter 2"));
+	// The meters are listed after the settings are loaded, see below
 
 	// Icon type entries, in the order of the LEDTYPE_* constants
 	m_cIconType.AddString (TEXT ("LED"));
@@ -627,8 +629,12 @@ BOOL CDialogConfig::OnInitDialog ()
 	}
 	m_nCounterSel	= 0;
 	m_nAutoStart	= IsAutoStartEnabled () ? 1 : 0;
+
+	// The settings live in %AppData% (or next to the program in portable mode), so they can be stored without problems
+	m_nUpdateINI	= 1;
 	LoadGlobalToControls ();
-	LoadCounterToControls (m_nCounterSel);
+	LoadMeterToControls (m_nCounterSel);
+	FillMeterList ();
 
 	// Update the dialog with the data written to the member variables
 	UpdateData (FALSE);
@@ -715,12 +721,12 @@ void CDialogConfig::OnBnClickedOk()
 
 void CDialogConfig::OnBnClickedDefaultvalues()
 {
-	// Default settings for everything except the autostart, which is not part of the settings
+	// Default settings for everything except the autostart, which is not part of the settings. A single meter is left.
 	SetDefaultSettings (m_oSettings);
 	m_nCounterSel	= 0;
-	m_bSecondCounterSeeded	= FALSE;
 	LoadGlobalToControls ();
-	LoadCounterToControls (m_nCounterSel);
+	LoadMeterToControls (m_nCounterSel);
+	FillMeterList ();
 
 	// Update the dialog with the new data
 	UpdateData (FALSE);
@@ -745,52 +751,173 @@ void CDialogConfig::OnBnClickedCancel()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Another counter was selected for editing: keep the settings of the previous one, show the settings of the new one
+//	The list of meters: "<number>: <counter name> (<instance>)"
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDialogConfig::OnCbnSelchangeCounterSel ()
+void CDialogConfig::FillMeterList ()
+{
+	m_cCounterSel.ResetContent ();
+
+	for (size_t i = 0; i < m_oSettings.aMeters.size (); i++)
+	{
+		CString	sMachine;
+		CString	sObject;
+		CString	sInstance;
+		CString	sCounter;
+		CString	sText;
+		CString	sPath	= (int) i == m_nCounterSel ? (m_sCounterPath.IsEmpty () ? m_sCounterPath : LocalPathToEnglish (m_sCounterPath)) : m_oSettings.aMeters[i].oCounter.sPath;
+
+		if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
+		{
+			sCounter	= sPath;
+		}
+		sText.Format (TEXT ("%d: %s"), m_oSettings.aMeters[i].nId, (LPCTSTR) sCounter);
+		if (!sInstance.IsEmpty ())
+		{
+			sText	+= TEXT (" (") + sInstance + TEXT (")");
+		}
+		m_cCounterSel.AddString (sText);
+	}
+
+	m_cCounterSel.SetCurSel (m_nCounterSel);
+	UpdateMeterButtons ();
+}
+
+void CDialogConfig::UpdateMeterButtons ()
+{
+	m_cAddMeter.EnableWindow (GetFreeMeterId (m_oSettings) != 0);
+	m_cRemoveMeter.EnableWindow (m_oSettings.aMeters.size () > 1);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Show another meter: keep the settings of the previous one, show the settings of the new one
+//	Returns without changing anything if the previous meter's entries are not valid
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::SwitchMeter (int nNew)
 {
 	int	nPrevious	= m_nCounterSel;
 
-	// Get data from the dialog box into our member variables. m_nCounterSel is now the new counter.
+	// Get data from the dialog box into our member variables. The index in m_nCounterSel is that of the new meter, if the user picked one.
 	if (!UpdateData (TRUE))
 	{
-		// An invalid entry: stay with the previous counter, the controls still show its settings
 		m_nCounterSel	= nPrevious;
 		m_cCounterSel.SetCurSel (nPrevious);
 		return;
 	}
 
-	int	nNew	= m_nCounterSel;
-	if (nNew == nPrevious || nNew < 0 || nNew > 1)
-	{
-		m_nCounterSel	= nPrevious;
-		return;
-	}
-
-	// The 100% value of the previous counter must be valid before leaving it
+	// The 100% value of the previous meter must be valid before leaving it
 	m_nCounterSel	= nPrevious;
 	if (!Read100Percent ())
 	{
 		m_cCounterSel.SetCurSel (nPrevious);
 		return;
 	}
+
+	SaveControlsToMeter (nPrevious);
 	m_nCounterSel	= nNew;
 
-	SaveControlsToCounter (nPrevious);
-
-	// A counter that was never set up starts with the settings of the other one, once. E.g. the same adapter and units for download and upload.
-	if (m_oSettings.aCounters[nNew].sPath.IsEmpty () && !m_bSecondCounterSeeded)
-	{
-		m_oSettings.aCounters[nNew]			= m_oSettings.aCounters[nPrevious];
-		m_oSettings.aCounters[nNew].sPath	= TEXT ("");
-		m_bSecondCounterSeeded				= TRUE;
-	}
-
-	LoadCounterToControls (nNew);
+	LoadMeterToControls (nNew);
+	FillMeterList ();
 	UpdateData (FALSE);
 	RefreshScaleControls ();
+	UpdateSwatches ();
+	SelectPathInBrowser ();
+	UpdatePreview ();
+}
+
+void CDialogConfig::OnCbnSelchangeCounterSel ()
+{
+	int	nNew	= m_cCounterSel.GetCurSel ();
+
+	if (nNew < 0 || nNew >= (int) m_oSettings.aMeters.size () || nNew == m_nCounterSel)
+	{
+		return;
+	}
+
+	SwitchMeter (nNew);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Add a meter. It starts as a copy of the current one (e.g. download and upload of the same adapter), which can be changed afterwards.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnBnClickedAddMeter ()
+{
+	int	nId	= GetFreeMeterId (m_oSettings);
+
+	if (nId == 0 || !UpdateData (TRUE) || !Read100Percent ())
+	{
+		return;
+	}
+	SaveControlsToMeter (m_nCounterSel);
+
+	MeterSettings	oMeter	= m_oSettings.aMeters[m_nCounterSel];
+
+	oMeter.nId						= nId;
+	oMeter.oCounter.dLearnedMax		= 0;
+	m_oSettings.aMeters.push_back (oMeter);
+	NormalizeSettings (m_oSettings);
+
+	// The list is sorted by number: find the new one
+	int	nNew	= 0;
+	for (size_t i = 0; i < m_oSettings.aMeters.size (); i++)
+	{
+		if (m_oSettings.aMeters[i].nId == nId)
+		{
+			nNew	= (int) i;
+		}
+	}
+
+	// The settings are already stored, so the previous meter is not stored again
+	m_nCounterSel	= nNew;
+	LoadMeterToControls (nNew);
+	FillMeterList ();
+	UpdateData (FALSE);
+	RefreshScaleControls ();
+	UpdateSwatches ();
+	UpdatePreview ();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Remove the meter that is shown. There is always at least one.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnBnClickedRemoveMeter ()
+{
+	if (m_oSettings.aMeters.size () <= 1)
+	{
+		return;
+	}
+
+	CString	sQuestion;
+	sQuestion.Format (TEXT ("Remove meter %d?"), m_oSettings.aMeters[m_nCounterSel].nId);
+	if (MessageBox (sQuestion, TEXT ("DiskLED: Remove meter"), MB_YESNO | MB_ICONQUESTION) != IDYES)
+	{
+		return;
+	}
+
+	m_oSettings.aMeters.erase (m_oSettings.aMeters.begin () + m_nCounterSel);
+	if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
+	{
+		m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
+	}
+
+	LoadMeterToControls (m_nCounterSel);
+	FillMeterList ();
+	UpdateData (FALSE);
+	RefreshScaleControls ();
+	UpdateSwatches ();
 	SelectPathInBrowser ();
 	UpdatePreview ();
 }
@@ -814,14 +941,8 @@ BOOL CDialogConfig::ApplySettings ()
 		return FALSE;
 	}
 
-	SaveControlsToCounter (m_nCounterSel);
+	SaveControlsToMeter (m_nCounterSel);
 	SaveGlobalFromControls ();
-
-	if (m_oSettings.bSecondCounter && m_oSettings.aCounters[1].sPath.IsEmpty ())
-	{
-		MessageBox (TEXT ("Please select a data source for counter 2, or untick \"Use a second counter\"."), TEXT ("DiskLED: Counter 2"), MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;
-	}
 
 	// Autostart is stored in the registry, not in the INI file
 	DWORD	nAutoStartError	= SetAutoStart (m_nAutoStart != 0);
@@ -832,7 +953,7 @@ BOOL CDialogConfig::ApplySettings ()
 
 	if (m_pMainFrame)
 	{
-		// Transmit the settings to the LED. If they do not work, the previous settings keep running and the dialog stays open for corrections.
+		// Transmit the settings to the meters. If they do not work, the previous settings keep running and the dialog stays open for corrections.
 		if (m_pMainFrame->ApplySettings (m_oSettings) != ERROR_SUCCESS)
 		{
 			return FALSE;
@@ -840,8 +961,13 @@ BOOL CDialogConfig::ApplySettings ()
 
 		// The main window corrects invalid values, show the corrected values
 		m_pMainFrame->GetSettings (m_oSettings);
+		if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
+		{
+			m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
+		}
 		LoadGlobalToControls ();
-		LoadCounterToControls (m_nCounterSel);
+		LoadMeterToControls (m_nCounterSel);
+		FillMeterList ();
 		UpdateData (FALSE);
 		RefreshScaleControls ();
 		UpdateSwatches ();
@@ -922,20 +1048,20 @@ static double TriangleWave (double dTime, double dPeriod)
 
 void CDialogConfig::UpdatePreview ()
 {
-	DiskLEDSettings	oSettings;
+	MeterSettings	oMeter;
 	BOOL			bTranslated;
 
 	// Style from the controls, invalid thresholds are corrected like they would be when applying
-	SetDefaultSettings (oSettings);
-	oSettings.nIconType		= m_cIconType.GetCurSel () + 1;
-	oSettings.nThresholdMid		= GetDlgItemInt (IDC_EDIT_THRESHOLD_MID, &bTranslated, FALSE);
-	oSettings.nThresholdHigh	= GetDlgItemInt (IDC_EDIT_THRESHOLD_HIGH, &bTranslated, FALSE);
+	SetDefaultMeterSettings (oMeter, 1);
+	oMeter.nIconType		= m_cIconType.GetCurSel () + 1;
+	oMeter.nThresholdMid	= GetDlgItemInt (IDC_EDIT_THRESHOLD_MID, &bTranslated, FALSE);
+	oMeter.nThresholdHigh	= GetDlgItemInt (IDC_EDIT_THRESHOLD_HIGH, &bTranslated, FALSE);
 	for (int i = 0; i < 3; i++)
 	{
-		oSettings.anColors[i]	= m_anColors[i];
+		oMeter.anColors[i]	= m_anColors[i];
 	}
-	NormalizeSettings (oSettings);
-	MakeIconStyle (oSettings, m_oPreviewStyle);
+	NormalizeMeterSettings (oMeter);
+	MakeIconStyle (oMeter, m_oPreviewStyle);
 
 	// A test signal in the units of the selected value format
 	DWORD	nValueFormat	= m_cValueFormat.GetCurSel () + 1;
@@ -951,19 +1077,15 @@ void CDialogConfig::UpdatePreview ()
 		break;
 	}
 
-	m_nPreviewCounters	= (m_cSecondCounter.GetCheck () == BST_CHECKED) ? 2 : 1;
 	m_dPreviewTime		+= PREVIEW_INTERVAL_MS / 1000.0;
 
-	for (int i = 0; i < 2; i++)
-	{
-		double	dValue	= dMax * TriangleWave (m_dPreviewTime * (i == 0 ? 1.0 : 1.3) + (i == 0 ? 0.0 : 2.5), 10.0);
+	double	dValue	= dMax * TriangleWave (m_dPreviewTime, 10.0);
 
-		memmove (m_aPreview[i].adHistory, m_aPreview[i].adHistory + 1, (HISTORY_SIZE - 1) * sizeof (double));
-		m_aPreview[i].adHistory[HISTORY_SIZE - 1]	= dValue;
-		m_aPreview[i].dValue						= dValue;
-		m_aPreview[i].dScale						= dMax;
-		m_aPreview[i].nValueFormat					= nValueFormat;
-	}
+	memmove (m_oPreview.adHistory, m_oPreview.adHistory + 1, (HISTORY_SIZE - 1) * sizeof (double));
+	m_oPreview.adHistory[HISTORY_SIZE - 1]	= dValue;
+	m_oPreview.dValue						= dValue;
+	m_oPreview.dScale						= dMax;
+	m_oPreview.nValueFormat					= nValueFormat;
 
 	if (m_cPreview.m_hWnd)
 	{
@@ -1012,34 +1134,11 @@ void CDialogConfig::OnDrawItem (int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 		{
 			CBitmap*	pOldBitmap	= oMemDC.SelectObject (&oBitmap);
 
-			// The number icon with two counters is two tray icons, shown side by side
-			int			nIcons		= UsesSeparateIcons (m_oPreviewStyle.nType, m_nPreviewCounters) ? 2 : 1;
-
 			// Enlarge without smoothing so the individual pixels are visible
 			pDC->SetStretchBltMode (COLORONCOLOR);
-			for (int i = 0; i < nIcons; i++)
-			{
-				int		nIconZoom	= (oRect.Width () / nIcons - 4) / nSize;
-				int		nAreaLeft	= oRect.left + i * oRect.Width () / nIcons;
-				int		nAreaWidth	= oRect.Width () / nIcons;
-
-				if (nIconZoom < 1)
-				{
-					nIconZoom	= 1;
-				}
-				if (nIcons == 1)
-				{
-					nIconZoom	= nZoom;
-					DrawIconImage (&oMemDC, nSize, m_oPreviewStyle, m_aPreview, m_nPreviewCounters);
-				}
-				else
-				{
-					DrawIconImage (&oMemDC, nSize, m_oPreviewStyle, m_aPreview + i, 1);
-				}
-
-				pDC->StretchBlt (nAreaLeft + (nAreaWidth - nSize * nIconZoom) / 2, oRect.top + (oRect.Height () - nSize * nIconZoom) / 2,
-					nSize * nIconZoom, nSize * nIconZoom, &oMemDC, 0, 0, nSize, nSize, SRCCOPY);
-			}
+			DrawIconImage (&oMemDC, nSize, m_oPreviewStyle, &m_oPreview, 1);
+			pDC->StretchBlt (oRect.left + (oRect.Width () - nSize * nZoom) / 2, oRect.top + (oRect.Height () - nSize * nZoom) / 2,
+				nSize * nZoom, nSize * nZoom, &oMemDC, 0, 0, nSize, nSize, SRCCOPY);
 
 			oMemDC.SelectObject (pOldBitmap);
 		}

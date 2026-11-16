@@ -94,6 +94,9 @@ public:
     void GetMenuDefaultItem(UINT& uItem, BOOL& bByPos);
     BOOL SetMenuDefaultItem(UINT uItem, BOOL bByPos);
 
+    // The menu resource of the context menu, if it is not the one with the ID of the icon. Set it before Create to share one menu between icons.
+    void SetMenuID(UINT uMenuID) { m_uMenuID = uMenuID; }
+
     // Change or retrieve the window to send notification messages to
     BOOL  SetNotificationWnd(CWnd* pNotifyWnd);
     CWnd* GetNotificationWnd() const;
@@ -150,6 +153,7 @@ protected:
     HICON        m_hSavedIcon;
     UINT         m_DefaultMenuItemID;
     BOOL         m_DefaultMenuItemByPos;
+    UINT         m_uMenuID;
 	UINT         m_uCreationFlags;
 
 // Static data

@@ -1,10 +1,13 @@
 #include "stdafx.h"
 #include "Helpers.h"
+#include "Settings.h"
 #include <pdh.h>
 #include <iphlpapi.h>
+#include <shlobj.h>
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "shell32.lib")
 
 
 //////////////////////////////////////////////////////////////////////
@@ -187,6 +190,131 @@ DWORD WriteINIValue (const CString &sINIFile, const CString &sSection, const CSt
 sValue.Format (TEXT ("%.15g"), nValue);
 
 	return WriteINIValue (sINIFile, sSection, sKey, sValue);
+}
+
+
+//////////////////////////////////////////////////////////////////////
+//
+//		The names of all sections of an INI file
+//
+//////////////////////////////////////////////////////////////////////
+
+void GetINISectionNames (const CString& sINIFile, CStringArray& asNames)
+{
+	DWORD	nBuffer	= 2048;
+
+	asNames.RemoveAll ();
+	if (!IsFileExistent (sINIFile))
+	{
+		return;
+	}
+
+	for (;;)
+	{
+		TCHAR*	pBuffer	= (TCHAR*) HeapAlloc (GetProcessHeap (), HEAP_ZERO_MEMORY, sizeof (TCHAR) * nBuffer);
+		if (pBuffer == NULL)
+		{
+			return;
+		}
+
+		DWORD	nCopied	= GetPrivateProfileSectionNames (pBuffer, nBuffer, sINIFile);
+		if (nCopied == nBuffer - 2)
+		{
+			// The buffer is too small
+			HeapFree (GetProcessHeap (), 0, pBuffer);
+			nBuffer	*= 2;
+			continue;
+		}
+
+		for (const TCHAR* sName = pBuffer; *sName != 0; sName += _tcslen (sName) + 1)
+		{
+			asNames.Add (sName);
+		}
+		HeapFree (GetProcessHeap (), 0, pBuffer);
+		return;
+	}
+}
+
+DWORD DeleteINISection (const CString& sINIFile, const CString& sSection)
+{
+	if (!IsFileExistent (sINIFile))
+	{
+		return ERROR_SUCCESS;
+	}
+
+	return WritePrivateProfileString (sSection, NULL, NULL, sINIFile) ? ERROR_SUCCESS : GetLastError ();
+}
+
+
+//////////////////////////////////////////////////////////////////////
+//
+//		Where the settings are kept
+//
+//////////////////////////////////////////////////////////////////////
+
+// A file with one of these names next to the executable turns on the portable mode
+#define PORTABLE_MARKER_1		TEXT ("portable")
+#define PORTABLE_MARKER_2		TEXT ("portable.txt")
+
+#define SETTINGS_FOLDER			TEXT ("DiskLED")
+
+static CString GetExecutableFolder ()
+{
+	TCHAR	sPath[MAX_PATH]	= { 0 };
+
+	GetModuleFileName (NULL, sPath, MAX_PATH);
+
+	CString	sFolder	= sPath;
+
+	return sFolder.Left (sFolder.ReverseFind ('\\'));
+}
+
+BOOL IsPortableMode ()
+{
+	CString	sFolder	= GetExecutableFolder ();
+
+	return IsFileExistent (sFolder + TEXT ("\\") + PORTABLE_MARKER_1) || IsFileExistent (sFolder + TEXT ("\\") + PORTABLE_MARKER_2);
+}
+
+DWORD CreateParentFolder (const CString& sFile)
+{
+	CString	sFolder	= sFile.Left (sFile.ReverseFind ('\\'));
+	int		nError	= SHCreateDirectoryEx (NULL, sFolder, NULL);
+
+	return (nError == ERROR_SUCCESS || nError == ERROR_ALREADY_EXISTS || nError == ERROR_FILE_EXISTS) ? ERROR_SUCCESS : (DWORD) nError;
+}
+
+CString GetSettingsFile ()
+{
+	CString	sExeFile	= GetExecutableFolder () + TEXT ("\\") + INI_SETTINGS_FILE;
+
+	if (IsPortableMode ())
+	{
+		return sExeFile;
+	}
+
+	// %AppData%\DiskLED, which the user can always write to (the installation folder may be read-only)
+	PWSTR	sAppData	= NULL;
+	CString	sFile;
+
+	if (FAILED (SHGetKnownFolderPath (FOLDERID_RoamingAppData, KF_FLAG_CREATE, NULL, &sAppData)) || sAppData == NULL)
+	{
+		CoTaskMemFree (sAppData);
+		return sExeFile;
+	}
+	sFile	= CString (sAppData) + TEXT ("\\") + SETTINGS_FOLDER + TEXT ("\\") + INI_SETTINGS_FILE;
+	CoTaskMemFree (sAppData);
+
+	// Settings from the installation folder (older versions): copy them once. The old file is renamed if possible, so it is not mistaken for current settings.
+	if (!IsFileExistent (sFile) && IsFileExistent (sExeFile))
+	{
+		if (CreateParentFolder (sFile) == ERROR_SUCCESS && CopyFile (sExeFile, sFile, TRUE))
+		{
+			MoveFileEx (sExeFile, sExeFile + TEXT (".migrated"), MOVEFILE_REPLACE_EXISTING);
+		}
+	}
+
+	return sFile;
 }
 
 
@@ -568,12 +696,14 @@ CString GetDefaultNetworkInstance ()
 
 //////////////////////////////////////////////////////////////////////
 //
-//      Autostart: a per-user Run entry for this copy of the executable
-//      The value name contains the full path, so every copy gets its own entry
+//      Autostart: a per-user Run entry for this executable
+//      There is one entry, named DiskLED, because only one DiskLED runs per user. Versions up to 2.1 used one entry per copy,
+//      named "DiskLED - <path>", see MigrateAutoStart.
 //
 //////////////////////////////////////////////////////////////////////
 
 #define AUTOSTART_REG_KEY	TEXT ("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+#define AUTOSTART_VALUE		TEXT ("DiskLED")
 
 // Windows 8 and later keep the enabled/disabled state shown in Task Manager's Startup tab here
 #define AUTOSTART_APPROVED_REG_KEY	TEXT ("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run")
@@ -618,6 +748,16 @@ static CString GetAutoStartEntry (CString& sCommand)
 
 	GetModuleFileName (NULL, sPath, MAX_PATH);
 	sCommand	= TEXT ("\"") + CString (sPath) + TEXT ("\"");
+
+	return CString (AUTOSTART_VALUE);
+}
+
+// The name of the entry that versions up to 2.1 made for this executable
+static CString GetLegacyAutoStartName ()
+{
+	TCHAR	sPath[MAX_PATH]	= { 0 };
+
+	GetModuleFileName (NULL, sPath, MAX_PATH);
 
 	return CString (TEXT ("DiskLED - ")) + sPath;
 }
@@ -683,6 +823,44 @@ DWORD SetAutoStart (BOOL bEnable)
 	}
 
 	return nError;
+}
+
+// Versions up to 2.1 made one entry per copy of the program, named "DiskLED - <path>". Remove the one of this copy and return whether it was active.
+static BOOL RemoveLegacyAutoStart ()
+{
+	CString	sName		= GetLegacyAutoStartName ();
+	HKEY	hKey		= NULL;
+	BOOL	bFound		= FALSE;
+	BOOL	bEnabled	= FALSE;
+
+	if (RegOpenKeyEx (HKEY_CURRENT_USER, AUTOSTART_REG_KEY, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+	{
+		bFound	= (RegQueryValueEx (hKey, sName, NULL, NULL, NULL, NULL) == ERROR_SUCCESS);
+		if (bFound)
+		{
+			bEnabled	= !IsStartupDisabled (sName);
+			RegDeleteValue (hKey, sName);
+			ClearStartupApproval (sName);
+		}
+		RegCloseKey (hKey);
+	}
+
+	return bFound && bEnabled;
+}
+
+// Replace the old per-copy entry by the single entry (the running instance owns it)
+void MigrateAutoStart ()
+{
+	if (RemoveLegacyAutoStart ())
+	{
+		SetAutoStart (TRUE);
+	}
+}
+
+// Another instance is already running and owns the autostart: only clean up the old entry of this copy
+void RemoveLegacyAutoStartEntry ()
+{
+	RemoveLegacyAutoStart ();
 }
 
 

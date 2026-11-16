@@ -193,20 +193,60 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 	}
 }
 
+void SetDefaultMeterSettings (MeterSettings& oMeter, int nId)
+{
+	oMeter.nId				= nId;
+	oMeter.nIconType		= DEFAULT_ICONTYPE;
+	oMeter.anColors[0]		= DEFAULT_COLOR_LOW;
+	oMeter.anColors[1]		= DEFAULT_COLOR_MID;
+	oMeter.anColors[2]		= DEFAULT_COLOR_HIGH;
+	oMeter.nThresholdMid	= DEFAULT_THRESHOLD_MID;
+	oMeter.nThresholdHigh	= DEFAULT_THRESHOLD_HIGH;
+
+	SetDefaultCounterSettings (oMeter.oCounter);
+	oMeter.oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
+}
+
 void SetDefaultSettings (DiskLEDSettings& oSettings)
 {
-	oSettings.nIconType			= DEFAULT_ICONTYPE;
-	oSettings.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
-	oSettings.bSecondCounter	= FALSE;
-	oSettings.anColors[0]		= DEFAULT_COLOR_LOW;
-	oSettings.anColors[1]		= DEFAULT_COLOR_MID;
-	oSettings.anColors[2]		= DEFAULT_COLOR_HIGH;
-	oSettings.nThresholdMid		= DEFAULT_THRESHOLD_MID;
-	oSettings.nThresholdHigh	= DEFAULT_THRESHOLD_HIGH;
+	MeterSettings	oMeter;
 
-	SetDefaultCounterSettings (oSettings.aCounters[0]);
-	SetDefaultCounterSettings (oSettings.aCounters[1]);
-	oSettings.aCounters[0].sPath	= DEFAULT_COUNTER_1_PATH;
+	SetDefaultMeterSettings (oMeter, 1);
+
+	oSettings.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
+	oSettings.aMeters.clear ();
+	oSettings.aMeters.push_back (oMeter);
+}
+
+int GetFreeMeterId (const DiskLEDSettings& oSettings)
+{
+	for (int nId = 1; nId <= MAX_METERS; nId++)
+	{
+		BOOL	bUsed	= FALSE;
+
+		for (size_t i = 0; i < oSettings.aMeters.size (); i++)
+		{
+			if (oSettings.aMeters[i].nId == nId)
+			{
+				bUsed	= TRUE;
+			}
+		}
+		if (!bUsed)
+		{
+			return nId;
+		}
+	}
+
+	return 0;
+}
+
+CString GetMeterSection (int nId)
+{
+	CString	sSection;
+
+	sSection.Format (TEXT ("%s%d"), INI_METER_SECTION_PREFIX, nId);
+
+	return sSection;
 }
 
 
@@ -216,12 +256,63 @@ void SetDefaultSettings (DiskLEDSettings& oSettings)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+void NormalizeMeterSettings (MeterSettings& oMeter)
+{
+	if (oMeter.nIconType < LEDTYPE_FLICKER || oMeter.nIconType > LEDTYPE_NUMBER)
+	{
+		oMeter.nIconType	= DEFAULT_ICONTYPE;
+	}
+	if (oMeter.nThresholdMid < 1 || oMeter.nThresholdMid > 100)
+	{
+		oMeter.nThresholdMid	= DEFAULT_THRESHOLD_MID;
+	}
+	if (oMeter.nThresholdHigh < oMeter.nThresholdMid || oMeter.nThresholdHigh > 100)
+	{
+		oMeter.nThresholdHigh	= (oMeter.nThresholdMid > DEFAULT_THRESHOLD_HIGH) ? oMeter.nThresholdMid : DEFAULT_THRESHOLD_HIGH;
+	}
+
+	CounterSettings&	oCounter	= oMeter.oCounter;
+
+	if (oCounter.sPath.IsEmpty ())
+	{
+		oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
+	}
+	if (!(oCounter.d100Percent > 0.0) || !_finite (oCounter.d100Percent) || oCounter.d100Percent > MAX_100PERCENT)
+	{
+		oCounter.d100Percent	= DEFAULT_100PERCENT;
+	}
+	if (oCounter.nValueFormat < VALUEFORMAT_PERCENT || oCounter.nValueFormat > VALUEFORMAT_MBYTES)
+	{
+		oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
+	}
+	if (oCounter.nScaleMode < SCALEMODE_FIXED || oCounter.nScaleMode > SCALEMODE_AUTO)
+	{
+		oCounter.nScaleMode		= SCALEMODE_FIXED;
+	}
+	if (!(oCounter.dLearnedMax >= 0.0) || !_finite (oCounter.dLearnedMax) || oCounter.dLearnedMax > MAX_100PERCENT)
+	{
+		oCounter.dLearnedMax	= 0;
+	}
+	if (oCounter.nAlertPercent < 0)
+	{
+		oCounter.nAlertPercent	= 0;
+	}
+	if (oCounter.nAlertPercent > MAX_ALERT_PERCENT)
+	{
+		oCounter.nAlertPercent	= MAX_ALERT_PERCENT;
+	}
+	if (oCounter.nAlertSeconds < 0)
+	{
+		oCounter.nAlertSeconds	= 0;
+	}
+	if (oCounter.nAlertSeconds > MAX_ALERT_SECONDS)
+	{
+		oCounter.nAlertSeconds	= MAX_ALERT_SECONDS;
+	}
+}
+
 void NormalizeSettings (DiskLEDSettings& oSettings)
 {
-	if (oSettings.nIconType < LEDTYPE_FLICKER || oSettings.nIconType > LEDTYPE_NUMBER)
-	{
-		oSettings.nIconType	= DEFAULT_ICONTYPE;
-	}
 	if ((int) oSettings.nUpdateInterval <= 0)
 	{
 		// 0 and negative numbers (read as huge unsigned values)
@@ -236,62 +327,54 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 		oSettings.nUpdateInterval	= MAX_UPDATE_INTERVAL_MS;
 	}
 
-	if (oSettings.nThresholdMid < 1 || oSettings.nThresholdMid > 100)
+	// Meters with a number that is out of range or already taken get the next free one, and too many meters are dropped
+	std::vector<MeterSettings>	aMeters;
+
+	for (size_t i = 0; i < oSettings.aMeters.size () && aMeters.size () < MAX_METERS; i++)
 	{
-		oSettings.nThresholdMid	= DEFAULT_THRESHOLD_MID;
-	}
-	if (oSettings.nThresholdHigh < oSettings.nThresholdMid || oSettings.nThresholdHigh > 100)
-	{
-		oSettings.nThresholdHigh	= (oSettings.nThresholdMid > DEFAULT_THRESHOLD_HIGH) ? oSettings.nThresholdMid : DEFAULT_THRESHOLD_HIGH;
+		MeterSettings	oMeter	= oSettings.aMeters[i];
+		BOOL			bTaken	= FALSE;
+
+		for (size_t j = 0; j < aMeters.size (); j++)
+		{
+			if (aMeters[j].nId == oMeter.nId)
+			{
+				bTaken	= TRUE;
+			}
+		}
+
+		if (oMeter.nId < 1 || oMeter.nId > MAX_METERS || bTaken)
+		{
+			DiskLEDSettings	oTemp;
+
+			oTemp.aMeters	= aMeters;
+			oMeter.nId		= GetFreeMeterId (oTemp);
+		}
+		NormalizeMeterSettings (oMeter);
+		aMeters.push_back (oMeter);
 	}
 
-	for (int i = 0; i < 2; i++)
+	// Sorted by number, so the order does not depend on the order in the file
+	for (size_t i = 1; i < aMeters.size (); i++)
 	{
-		CounterSettings&	oCounter	= oSettings.aCounters[i];
+		for (size_t j = i; j > 0 && aMeters[j].nId < aMeters[j - 1].nId; j--)
+		{
+			MeterSettings	oSwap	= aMeters[j];
 
-		if (i == 0 && oCounter.sPath.IsEmpty ())
-		{
-			oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
-		}
-		if (!(oCounter.d100Percent > 0.0) || !_finite (oCounter.d100Percent) || oCounter.d100Percent > MAX_100PERCENT)
-		{
-			oCounter.d100Percent	= DEFAULT_100PERCENT;
-		}
-		if (oCounter.nValueFormat < VALUEFORMAT_PERCENT || oCounter.nValueFormat > VALUEFORMAT_MBYTES)
-		{
-			oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
-		}
-		if (oCounter.nScaleMode < SCALEMODE_FIXED || oCounter.nScaleMode > SCALEMODE_AUTO)
-		{
-			oCounter.nScaleMode		= SCALEMODE_FIXED;
-		}
-		if (!(oCounter.dLearnedMax >= 0.0) || !_finite (oCounter.dLearnedMax) || oCounter.dLearnedMax > MAX_100PERCENT)
-		{
-			oCounter.dLearnedMax	= 0;
-		}
-		if (oCounter.nAlertPercent < 0)
-		{
-			oCounter.nAlertPercent	= 0;
-		}
-		if (oCounter.nAlertPercent > MAX_ALERT_PERCENT)
-		{
-			oCounter.nAlertPercent	= MAX_ALERT_PERCENT;
-		}
-		if (oCounter.nAlertSeconds < 0)
-		{
-			oCounter.nAlertSeconds	= 0;
-		}
-		if (oCounter.nAlertSeconds > MAX_ALERT_SECONDS)
-		{
-			oCounter.nAlertSeconds	= MAX_ALERT_SECONDS;
+			aMeters[j]		= aMeters[j - 1];
+			aMeters[j - 1]	= oSwap;
 		}
 	}
 
-	// A second counter needs a path
-	if (oSettings.aCounters[1].sPath.IsEmpty ())
+	if (aMeters.empty ())
 	{
-		oSettings.bSecondCounter	= FALSE;
+		MeterSettings	oMeter;
+
+		SetDefaultMeterSettings (oMeter, 1);
+		aMeters.push_back (oMeter);
 	}
+
+	oSettings.aMeters	= aMeters;
 }
 
 
@@ -349,48 +432,156 @@ static void LoadCounterSettings (const CString& sINIFile, const CString& sSectio
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Read the look of a meter (icon type, colours, thresholds) from an INI section. Values not found keep their previous value.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static void LoadMeterStyle (const CString& sINIFile, const CString& sSection, MeterSettings& oMeter)
+{
+	CString	sData;
+
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_LEDTYPE, &sData) == ERROR_SUCCESS)
+	{
+		oMeter.nIconType	= LookupValue (g_aIconTypes, sData, oMeter.nIconType);
+	}
+
+	const TCHAR*	asColorKeys[3]	= { INI_VALUE_COLOR_LOW, INI_VALUE_COLOR_MID, INI_VALUE_COLOR_HIGH };
+	for (int i = 0; i < 3; i++)
+	{
+		if (ReadINIValue (sINIFile, sSection, asColorKeys[i], &sData) == ERROR_SUCCESS)
+		{
+			ParseColor (sData, oMeter.anColors[i]);
+		}
+	}
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_THRESHOLD_MID, &sData) == ERROR_SUCCESS)
+	{
+		oMeter.nThresholdMid	= _ttoi (sData);
+	}
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_THRESHOLD_HIGH, &sData) == ERROR_SUCCESS)
+	{
+		oMeter.nThresholdHigh	= _ttoi (sData);
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Files of the versions up to 2.1: the first section also holds what both counters share, a second counter is a second section.
+//	Every counter becomes a meter with the shared look.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static void LoadLegacySettings (const CString& sINIFile, DiskLEDSettings& oSettings)
+{
+	CString			sData;
+	MeterSettings	oMeter;
+	BOOL			bSecondCounter	= FALSE;
+
+	SetDefaultMeterSettings (oMeter, 1);
+
+	if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
+	{
+		oSettings.nUpdateInterval	= (DWORD) _ttoi (sData);
+	}
+	if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_SECOND_COUNTER, &sData) == ERROR_SUCCESS)
+	{
+		bSecondCounter	= (_ttoi (sData) != 0);
+	}
+
+	LoadMeterStyle (sINIFile, INI_LEGACY_COUNTER_1_SECTION, oMeter);
+	LoadCounterSettings (sINIFile, INI_LEGACY_COUNTER_1_SECTION, oMeter.oCounter);
+	oSettings.aMeters.clear ();
+	oSettings.aMeters.push_back (oMeter);
+
+	if (bSecondCounter)
+	{
+		MeterSettings	oSecond	= oMeter;
+
+		SetDefaultCounterSettings (oSecond.oCounter);
+		oSecond.nId				= 2;
+		oSecond.oCounter.sPath	= TEXT ("");
+		LoadCounterSettings (sINIFile, INI_LEGACY_COUNTER_2_SECTION, oSecond.oCounter);
+		if (!oSecond.oCounter.sPath.IsEmpty ())
+		{
+			oSettings.aMeters.push_back (oSecond);
+		}
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The number of a "Meter <number>" section name, 0 if it is another section
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static int GetMeterIdOfSection (const CString& sSection)
+{
+	CString	sPrefix	= INI_METER_SECTION_PREFIX;
+
+	if (sSection.GetLength () <= sPrefix.GetLength () || sSection.Left (sPrefix.GetLength ()).CompareNoCase (sPrefix) != 0)
+	{
+		return 0;
+	}
+
+	CString	sNumber	= sSection.Mid (sPrefix.GetLength ());
+	int		nId		= _ttoi (sNumber);
+
+	// Only plain numbers: "Meter 2 old" is not a meter
+	CString	sCheck;
+	sCheck.Format (TEXT ("%d"), nId);
+
+	return (sCheck == sNumber && nId >= 1 && nId <= MAX_METERS) ? nId : 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Read all settings from the INI file. Settings not found get their default value.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 DWORD LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings)
 {
-	CString	sData;
+	CString			sData;
+	CStringArray	asSections;
 
 	SetDefaultSettings (oSettings);
 
-	if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_LEDTYPE, &sData) == ERROR_SUCCESS)
+	GetINISectionNames (sINIFile, asSections);
+
+	std::vector<MeterSettings>	aMeters;
+
+	for (int i = 0; i < asSections.GetSize (); i++)
 	{
-		oSettings.nIconType	= LookupValue (g_aIconTypes, sData, oSettings.nIconType);
-	}
-	if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
-	{
-		oSettings.nUpdateInterval	= (DWORD) _ttoi (sData);
-	}
-	if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_SECOND_COUNTER, &sData) == ERROR_SUCCESS)
-	{
-		oSettings.bSecondCounter	= (_ttoi (sData) != 0);
+		int	nId	= GetMeterIdOfSection (asSections[i]);
+
+		// A section without a counter path is not a meter (e.g. only a learned maximum written for a meter that was never saved)
+		if (nId == 0 || ReadINIValue (sINIFile, asSections[i], INI_VALUE_PATH, &sData) != ERROR_SUCCESS)
+		{
+			continue;
+		}
+
+		MeterSettings	oMeter;
+
+		SetDefaultMeterSettings (oMeter, nId);
+		LoadMeterStyle (sINIFile, asSections[i], oMeter);
+		LoadCounterSettings (sINIFile, asSections[i], oMeter.oCounter);
+		aMeters.push_back (oMeter);
 	}
 
-	const TCHAR*	asColorKeys[3]	= { INI_VALUE_COLOR_LOW, INI_VALUE_COLOR_MID, INI_VALUE_COLOR_HIGH };
-	for (int i = 0; i < 3; i++)
+	if (!aMeters.empty ())
 	{
-		if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, asColorKeys[i], &sData) == ERROR_SUCCESS)
+		oSettings.aMeters	= aMeters;
+		if (ReadINIValue (sINIFile, INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
 		{
-			ParseColor (sData, oSettings.anColors[i]);
+			oSettings.nUpdateInterval	= (DWORD) _ttoi (sData);
 		}
 	}
-	if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_THRESHOLD_MID, &sData) == ERROR_SUCCESS)
+	else if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_PATH, &sData) == ERROR_SUCCESS)
 	{
-		oSettings.nThresholdMid	= _ttoi (sData);
+		LoadLegacySettings (sINIFile, oSettings);
 	}
-	if (ReadINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_THRESHOLD_HIGH, &sData) == ERROR_SUCCESS)
-	{
-		oSettings.nThresholdHigh	= _ttoi (sData);
-	}
-
-	LoadCounterSettings (sINIFile, INI_COUNTER_1_SECTION, oSettings.aCounters[0]);
-	LoadCounterSettings (sINIFile, INI_COUNTER_2_SECTION, oSettings.aCounters[1]);
 
 	NormalizeSettings (oSettings);
 
@@ -443,52 +634,82 @@ static DWORD SaveCounterSettings (const CString& sINIFile, const CString& sSecti
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Write the look of a meter and its counter to an INI section. Returns the first error.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static DWORD SaveMeterSettings (const CString& sINIFile, const MeterSettings& oMeter)
+{
+	CString	sSection	= GetMeterSection (oMeter.nId);
+	DWORD	nError		= WriteINIValue (sINIFile, sSection, INI_VALUE_LEDTYPE, CString (LookupName (g_aIconTypes, oMeter.nIconType)));
+
+	const TCHAR*	asColorKeys[3]	= { INI_VALUE_COLOR_LOW, INI_VALUE_COLOR_MID, INI_VALUE_COLOR_HIGH };
+	for (int i = 0; i < 3 && nError == ERROR_SUCCESS; i++)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, asColorKeys[i], FormatColor (oMeter.anColors[i]));
+	}
+	if (nError == ERROR_SUCCESS)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_THRESHOLD_MID, oMeter.nThresholdMid);
+	}
+	if (nError == ERROR_SUCCESS)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_THRESHOLD_HIGH, oMeter.nThresholdHigh);
+	}
+	if (nError == ERROR_SUCCESS)
+	{
+		nError	= SaveCounterSettings (sINIFile, sSection, oMeter.oCounter);
+	}
+
+	return nError;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Write all settings to the INI file. Returns the first error.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 DWORD SaveSettings (const CString& sINIFile, const DiskLEDSettings& oSettings)
 {
-	DWORD	nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_LEDTYPE, CString (LookupName (g_aIconTypes, oSettings.nIconType)));
+	DWORD	nError	= CreateParentFolder (sINIFile);
 
 	if (nError == ERROR_SUCCESS)
 	{
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_UPDATE_INTERVAL, (int) oSettings.nUpdateInterval);
-	}
-	if (nError == ERROR_SUCCESS)
-	{
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_SECOND_COUNTER, (int) (oSettings.bSecondCounter != 0));
+		nError	= WriteINIValue (sINIFile, INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, (int) oSettings.nUpdateInterval);
 	}
 
-	const TCHAR*	asColorKeys[3]	= { INI_VALUE_COLOR_LOW, INI_VALUE_COLOR_MID, INI_VALUE_COLOR_HIGH };
-	for (int i = 0; i < 3 && nError == ERROR_SUCCESS; i++)
+	for (size_t i = 0; i < oSettings.aMeters.size () && nError == ERROR_SUCCESS; i++)
 	{
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, asColorKeys[i], FormatColor (oSettings.anColors[i]));
-	}
-	if (nError == ERROR_SUCCESS)
-	{
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_THRESHOLD_MID, oSettings.nThresholdMid);
-	}
-	if (nError == ERROR_SUCCESS)
-	{
-		nError	= WriteINIValue (sINIFile, INI_COUNTER_1_SECTION, INI_VALUE_THRESHOLD_HIGH, oSettings.nThresholdHigh);
+		nError	= SaveMeterSettings (sINIFile, oSettings.aMeters[i]);
 	}
 
+	// Remove what is no longer there: meters that were deleted, and the sections of the older versions (they would be read again if the new sections were gone)
 	if (nError == ERROR_SUCCESS)
 	{
-		nError	= SaveCounterSettings (sINIFile, INI_COUNTER_1_SECTION, oSettings.aCounters[0]);
-	}
+		CStringArray	asSections;
 
-	// The second counter is only stored once it has a path. Without one, remove an old section, or it would come back at the next start.
-	if (nError == ERROR_SUCCESS)
-	{
-		if (!oSettings.aCounters[1].sPath.IsEmpty ())
+		GetINISectionNames (sINIFile, asSections);
+		for (int i = 0; i < asSections.GetSize () && nError == ERROR_SUCCESS; i++)
 		{
-			nError	= SaveCounterSettings (sINIFile, INI_COUNTER_2_SECTION, oSettings.aCounters[1]);
-		}
-		else if (IsFileExistent (sINIFile) && !WritePrivateProfileString (INI_COUNTER_2_SECTION, NULL, NULL, sINIFile))
-		{
-			nError	= GetLastError ();
+			int		nId		= GetMeterIdOfSection (asSections[i]);
+			BOOL	bKeep	= FALSE;
+
+			for (size_t j = 0; j < oSettings.aMeters.size (); j++)
+			{
+				if (oSettings.aMeters[j].nId == nId)
+				{
+					bKeep	= TRUE;
+				}
+			}
+
+			BOOL	bLegacy	= (asSections[i].CompareNoCase (INI_LEGACY_COUNTER_1_SECTION) == 0 || asSections[i].CompareNoCase (INI_LEGACY_COUNTER_2_SECTION) == 0);
+
+			if ((nId != 0 && !bKeep) || bLegacy)
+			{
+				nError	= DeleteINISection (sINIFile, asSections[i]);
+			}
 		}
 	}
 

@@ -6,14 +6,14 @@
 #include <math.h>
 
 
-void MakeIconStyle (const DiskLEDSettings& oSettings, IconStyle& oStyle)
+void MakeIconStyle (const MeterSettings& oMeter, IconStyle& oStyle)
 {
-	oStyle.nType				= oSettings.nIconType;
-	oStyle.anColors[0]			= oSettings.anColors[0];
-	oStyle.anColors[1]			= oSettings.anColors[1];
-	oStyle.anColors[2]			= oSettings.anColors[2];
-	oStyle.adThresholds[0]		= oSettings.nThresholdMid;
-	oStyle.adThresholds[1]		= oSettings.nThresholdHigh;
+	oStyle.nType				= oMeter.nIconType;
+	oStyle.anColors[0]			= oMeter.anColors[0];
+	oStyle.anColors[1]			= oMeter.anColors[1];
+	oStyle.anColors[2]			= oMeter.anColors[2];
+	oStyle.adThresholds[0]		= oMeter.nThresholdMid;
+	oStyle.adThresholds[1]		= oMeter.nThresholdHigh;
 }
 
 
@@ -30,12 +30,6 @@ int GetColorIndex (const IconStyle& oStyle, double dNormalized)
 	}
 
 	return 0;
-}
-
-
-BOOL UsesSeparateIcons (DWORD nIconType, int nCounters)
-{
-	return nIconType == LEDTYPE_NUMBER && nCounters >= 2;
 }
 
 

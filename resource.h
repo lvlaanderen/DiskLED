@@ -39,10 +39,10 @@
 #define IDS_TOOLTIP_THRESHOLDS          162
 #define IDS_TOOLTIP_AUTOSTART           163
 #define IDS_TOOLTIP_COUNTERSEL          164
-#define IDS_TOOLTIP_COUNTER2            165
+#define IDS_TOOLTIP_ADD_METER           165
 #define IDS_TOOLTIP_SCALEMODE           166
 #define IDS_TOOLTIP_ALERT               167
-#define IDR_POPUP_MENU2                 168
+#define IDS_TOOLTIP_REMOVE_METER        168
 #define IDS_TOOLTIP_USE_LINKSPEED       169
 #define IDS_TOOLTIP_QUICKPICK           170
 #define IDC_ABOUT_ICON1                 1000
@@ -85,7 +85,7 @@
 #define IDC_EDIT_THRESHOLD_HIGH         1042
 #define IDC_CHECK_AUTOSTART             1043
 #define IDC_COMBO_COUNTERSEL            1044
-#define IDC_CHECK_COUNTER2              1045
+#define IDC_ADD_METER                   1045
 #define IDC_COMBO_SCALEMODE             1046
 #define IDC_EDIT_ALERT_PERCENT          1047
 #define IDC_EDIT_ALERT_SECONDS          1048
@@ -108,6 +108,7 @@
 #define IDC_WARN_TEXT4                  1065
 #define IDC_QUICKPICK_TEXT              1066
 #define IDC_COMBO_QUICKPICK             1067
+#define IDC_REMOVE_METER                1068
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -122,7 +123,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        171
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1068
+#define _APS_NEXT_CONTROL_VALUE         1069
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

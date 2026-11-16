@@ -136,6 +136,7 @@ void CSystemTray::Initialise()
 
     m_DefaultMenuItemID    = 0;
     m_DefaultMenuItemByPos = TRUE;
+    m_uMenuID              = 0;
 
     m_bShowIconPending = FALSE;
 
@@ -146,9 +147,8 @@ void CSystemTray::Initialise()
 	m_uCreationFlags = 0;
 
 #ifdef SYSTEMTRAY_USEW2K
-    OSVERSIONINFO os = { sizeof(os) };
-    GetVersionEx(&os);
-    m_bWin2K = ( VER_PLATFORM_WIN32_NT == os.dwPlatformId && os.dwMajorVersion >= 5 );
+    // The minimum supported Windows (see targetver.h) has the Windows 2000 tray features
+    m_bWin2K = TRUE;
 #else
     m_bWin2K = FALSE;
 #endif
@@ -182,13 +182,8 @@ BOOL CSystemTray::Create(CWnd* pParent, UINT uCallbackMessage, LPCTSTR szToolTip
                          DWORD dwBalloonIcon /*=NIIF_NONE*/,
                          UINT uBalloonTimeout /*=10*/)
 {
-    // this is only for Windows 95 (or higher)
-    m_bEnabled = (GetVersion() & 0xff) >= 4;
-    if (!m_bEnabled) 
-    {
-        ASSERT(FALSE);
-        return FALSE;
-    }
+    // The tray exists on every supported Windows
+    m_bEnabled = TRUE;
 
     m_nMaxTooltipLength = _countof(m_tnd.szTip);
     
@@ -206,6 +201,8 @@ BOOL CSystemTray::Create(CWnd* pParent, UINT uCallbackMessage, LPCTSTR szToolTip
     m_tnd.cbSize = sizeof(NOTIFYICONDATA);
     m_tnd.hWnd   = pParent->GetSafeHwnd()? pParent->GetSafeHwnd() : m_hWnd;
     m_tnd.uID    = uID;
+    if (m_uMenuID == 0)
+        m_uMenuID = uID;      // By default the menu resource has the ID of the icon, see SetMenuID
     m_tnd.hIcon  = icon;
     m_tnd.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     m_tnd.uCallbackMessage = uCallbackMessage;
@@ -764,7 +761,7 @@ BOOL CSystemTray::SetMenuDefaultItem(UINT uItem, BOOL bByPos)
 
     CMenu menu, *pSubMenu;
 
-    if (!menu.LoadMenu(m_tnd.uID))
+    if (!menu.LoadMenu(m_uMenuID))
         return FALSE;
 
     pSubMenu = menu.GetSubMenu(0);
@@ -849,7 +846,7 @@ LRESULT CSystemTray::OnTrayNotification(WPARAM wParam, LPARAM lParam)
     // Clicking with right button brings up a context menu
     if (LOWORD(lParam) == WM_RBUTTONUP)
     {    
-        if (!menu.LoadMenu(m_tnd.uID))
+        if (!menu.LoadMenu(m_uMenuID))
             return 0;
         
         pSubMenu = menu.GetSubMenu(0);
@@ -883,7 +880,7 @@ LRESULT CSystemTray::OnTrayNotification(WPARAM wParam, LPARAM lParam)
         UINT uItem;
         if (m_DefaultMenuItemByPos)
         {
-            if (!menu.LoadMenu(m_tnd.uID))
+            if (!menu.LoadMenu(m_uMenuID))
                 return 0;
             
             pSubMenu = menu.GetSubMenu(0);

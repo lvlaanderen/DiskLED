@@ -4,9 +4,19 @@ DWORD	ReadINIValue (CString sINIFile, CString sSection, CString sKey, CString* s
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const CString &sValue);
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const int &nValue);
 DWORD	WriteINIValue (const CString &sINIFile, const CString &sSection, const CString &sKey, const double &nValue);
+void	GetINISectionNames (const CString& sINIFile, CStringArray& asNames);
+DWORD	DeleteINISection (const CString& sINIFile, const CString& sSection);
 BOOL	IsFileExistent (CString sPath);
+
+// The INI file: %AppData%\DiskLED\DiskLED.ini, or next to the executable in portable mode. A file next to the executable from an older version is copied to %AppData% once.
+CString	GetSettingsFile ();
+BOOL	IsPortableMode ();
+DWORD	CreateParentFolder (const CString& sFile);
+
 BOOL	IsAutoStartEnabled ();
 DWORD	SetAutoStart (BOOL bEnable);
+void	MigrateAutoStart ();
+void	RemoveLegacyAutoStartEntry ();
 BOOL	ParsePerfPath (const CString& sPath, CString& sMachine, CString& sObject, CString& sInstance, CString& sCounter);
 CString	MakePerfPath (const CString& sMachine, const CString& sObject, const CString& sInstance, const CString& sCounter);
 CString	LocalPathToEnglish (const CString& sPath);

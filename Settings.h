@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 // Icon type constants (the numeric values are internal, the INI file uses the text)
 #define	LEDTYPE_FLICKER				1
 #define	LEDTYPE_FLICKER_TEXT		TEXT ("Flicker")
@@ -70,14 +72,21 @@
 // Name of the INI (settings) file
 #define INI_SETTINGS_FILE			TEXT ("DiskLED.ini")
 
-// INI sections. Settings that are not specific to a counter live in the first section.
-#define INI_COUNTER_1_SECTION		TEXT ("Performance Counter 1")
-#define INI_COUNTER_2_SECTION		TEXT ("Performance Counter 2")
+// Most meters (tray icons) there can be. The meter numbers (and the tray icon IDs) are 1 to MAX_METERS.
+#define MAX_METERS					16
+
+// INI sections. [General] holds what is not specific to a meter, every meter has a section "Meter <number>".
+#define INI_GENERAL_SECTION			TEXT ("General")
+#define INI_METER_SECTION_PREFIX	TEXT ("Meter ")
+
+// Sections of the older versions (up to 2.1): the settings of both counters, and the first one also what they shared
+#define INI_LEGACY_COUNTER_1_SECTION	TEXT ("Performance Counter 1")
+#define INI_LEGACY_COUNTER_2_SECTION	TEXT ("Performance Counter 2")
 
 // INI value names
 #define INI_VALUE_LEDTYPE			TEXT ("LEDType")
 #define INI_VALUE_UPDATE_INTERVAL	TEXT ("UpdateInterval")
-#define INI_VALUE_SECOND_COUNTER	TEXT ("SecondCounter")
+#define INI_VALUE_SECOND_COUNTER	TEXT ("SecondCounter")				// Older versions. Only read.
 #define INI_VALUE_COLOR_LOW			TEXT ("ColorLow")
 #define INI_VALUE_COLOR_MID			TEXT ("ColorMid")
 #define INI_VALUE_COLOR_HIGH		TEXT ("ColorHigh")
@@ -107,23 +116,43 @@ struct CounterSettings
 	int			nAlertSeconds;		// ... for at least this many seconds
 };
 
-// All settings
-struct DiskLEDSettings
+// One meter: a counter shown as a tray icon
+struct MeterSettings
 {
+	int				nId;				// 1 to MAX_METERS. Stays the same when other meters are removed, it names the INI section and the tray icon.
 	DWORD			nIconType;			// LEDTYPE_*
-	DWORD			nUpdateInterval;	// ms
-	BOOL			bSecondCounter;		// Display a second counter as well
-	CounterSettings	aCounters[2];
 	COLORREF		anColors[3];		// Low, mid and high colour
 	int				nThresholdMid;		// % of the scale where the mid colour starts
 	int				nThresholdHigh;		// % of the scale where the high colour starts
+	CounterSettings	oCounter;
+};
+
+// All settings
+struct DiskLEDSettings
+{
+	DWORD					nUpdateInterval;	// ms, for all meters
+	std::vector<MeterSettings>	aMeters;		// At least one, sorted by nId
 };
 
 void	SetDefaultCounterSettings (CounterSettings& oCounter);
 
 // Sensible value format, scale mode and 100% value for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
 void	GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter);
+void	SetDefaultMeterSettings (MeterSettings& oMeter, int nId);
 void	SetDefaultSettings (DiskLEDSettings& oSettings);
+
+// Replace invalid values with defaults, make sure there is at least one meter, the numbers are valid and unique and the meters are sorted
+void	NormalizeMeterSettings (MeterSettings& oMeter);
 void	NormalizeSettings (DiskLEDSettings& oSettings);
+
+// The smallest meter number that is not used yet, 0 if there are MAX_METERS meters
+int		GetFreeMeterId (const DiskLEDSettings& oSettings);
+
+// The name of a meter's INI section
+CString	GetMeterSection (int nId);
+
+// Read the settings. A missing or empty file gives the defaults. Files of the older versions (a [Performance Counter 1] section) are converted.
 DWORD	LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings);
+
+// Write the settings (creating the file and its folder if needed). Meters that are no longer there and the sections of the older versions are removed from the file.
 DWORD	SaveSettings (const CString& sINIFile, const DiskLEDSettings& oSettings);
