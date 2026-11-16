@@ -72,12 +72,20 @@ The **Start with Windows** checkbox adds or removes a per-user entry under `HKCU
 
 If the counters cannot be read, for example because a network adapter disappeared or Windows has not finished starting, the meter shows an error icon and the problem in the tooltip, shows one notification, and tries again every 5 seconds. A meter with a problem does not affect the other meters.
 
-## Upgrading from version 2
+## Upgrading from version 1 or 2
 
-Version 2 needed one folder, one program and one INI file for every counter. In version 3:
+Versions 1 and 2 needed one folder, one program and one INI file for every counter. In version 3:
 
 - If you used a single DiskLED, install version 3 or unzip it over the old folder. Your `DiskLED.ini` is read, with a second counter becoming a second meter.
-- If you used several copies, install or unzip version 3 once and add a meter for each counter with the wizard. The INI files of the other copies are not imported. Remove their entries from Start with Windows (they are replaced by a single entry), and delete the old folders when you are done.
+- If you used several copies, let DiskLED take over their meters, see **Import** below. The old copies keep running until you close them from their tray menu, and their folders can be deleted when you are done.
+
+### Import
+
+**Add meter**, **Import from an older DiskLED...** lists the meters of the older copies that DiskLED can find: in the Start with Windows entries that version 2 made (`DiskLED - <path>`), in the Startup folders, and among the running programs. Only copies with a `DiskLED.ini` next to the program are listed, and nothing else on the computer is searched. **Browse** adds the `DiskLED.ini` of a copy that was not found. Select the meters you want. A meter you already have is not selected. The imported meters keep their icon, colours, scale, warnings and learned maximum, paths in the language of the system (version 1) become English paths.
+
+The older copies are not changed or stopped. The option **Also remove their Start with Windows entries** removes the entries of the copies you import from, when you save, so they do not start again at the next logon. Shortcuts in the Startup folder are not removed.
+
+When DiskLED starts without settings (the first start) and finds an older copy, it offers the import by itself. Whatever you answer, the settings that are running are stored, so it asks only once.
 
 ## Examples
 

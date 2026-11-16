@@ -24,6 +24,9 @@
 // All counters reading exactly zero for this long is treated as a possibly stale query (e.g. after a network adapter change), the counters are reconnected
 #define	STALE_ZERO_MS				60000
 
+// Posted to the main window when DiskLED starts without settings: look for older copies to import
+#define	WM_FIRST_RUN				(WM_APP + 11)
+
 
 // The main window (hidden). It owns the meters, the one PDH query that all their counters are in, and the timer.
 class CMainFrame : public CFrameWnd
@@ -66,10 +69,12 @@ private:
 	DWORD					m_nReconnectTick;				// Tick count of the last Reconnect
 	DWORD					m_nLastLearnSaveTick;			// Tick count of the last check whether the learned maximum needs saving
 	DWORD					m_nZeroSince;					// Tick count since when all counters read zero, 0 = not all zero
+	BOOL					m_bFirstRun;					// There were no settings yet when DiskLED started
 	CString					m_sLastError;
 
 	// Member functions
 	void					ShowConfigurationDialog ();
+	void					OpenSettings (BOOL bImport);
 	void					ShowAboutDialog ();
 	void					Shutdown ();
 	DWORD					Initialize (const DiskLEDSettings& oSettings, BOOL bSilent);
@@ -97,6 +102,7 @@ protected:
 	afx_msg LRESULT OnPowerBroadcast(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnTrayNotification(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnShowSettings(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnFirstRun(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 };
 

@@ -16,6 +16,7 @@ Several meters in one program:
 
 Easier setup:
 - A wizard adds a meter in three steps: what to monitor (internet download or upload speed, disk, processor, memory or another counter), which adapter, disk or processor, and how it looks, with a preview.
+- Import from an older DiskLED: the wizard finds copies of version 1.x and 2.x (in their Start with Windows entries, the Startup folder and among the running programs, or you choose their DiskLED.ini) and takes over the meters you select, with their icon, colours, scale and warnings. The older copies are not changed or stopped. If you like, their Start with Windows entries are removed. When DiskLED starts for the first time and finds an older copy, it offers the import.
 - The settings window lists the meters on the left. Changes are shown on the tray icons right away. Save keeps them, Revert goes back, and closing with unsaved changes asks what to do. The Update INI checkbox and the Apply button are gone.
 - All messages follow the Windows theme (dark or light), not only the settings window.
 - The settings window opens on the screen where you clicked the tray icon.
@@ -25,7 +26,7 @@ Settings and installation:
 - Portable use: a file called "portable" next to DiskLED.exe keeps the settings next to the program, as before. The zip download contains this file.
 - There is an installer now. It lets you choose between Program Files (all users) and a folder for the current user, and offers to start DiskLED with Windows. The zip stays available for portable use.
 - Only one DiskLED runs per user. Starting it again opens the settings of the running one. There is a single Start with Windows entry, an entry of an older version for the same program is replaced.
-- If you ran several copies of DiskLED in several folders: install or unzip version 3.0 once and add a meter for each counter with the wizard. The settings of the other copies are not imported.
+- If you ran several copies of DiskLED in several folders (version 1.x or 2.x): the wizard can take over their meters, see "Import" above. On the first start DiskLED offers this by itself when it finds an older copy.
 
 Changed:
 - INI files: the settings of a meter are in a section [Meter n], the update interval is in [General]. See the README. Older files are still read.

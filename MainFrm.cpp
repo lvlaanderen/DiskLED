@@ -8,6 +8,7 @@
 #include "DialogAbout.h"
 #include "DialogConfig.h"
 #include "DialogMessage.h"
+#include "Import.h"
 #include <math.h>
 
 
@@ -38,6 +39,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_ICON_NOTIFY,		OnTrayNotification)
 	ON_MESSAGE(WM_POWERBROADCAST,	OnPowerBroadcast)
 	ON_REGISTERED_MESSAGE(g_nMsgShowSettings, OnShowSettings)
+	ON_MESSAGE(WM_FIRST_RUN,		OnFirstRun)
 END_MESSAGE_MAP()
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -58,6 +60,7 @@ CMainFrame::CMainFrame()
 	m_nReconnectTick		= GetTickCount () - PDH_RETRY_MS;
 	m_nLastLearnSaveTick	= GetTickCount ();
 	m_nZeroSince			= 0;
+	m_bFirstRun				= FALSE;
 }
 
 CMainFrame::~CMainFrame()
@@ -92,6 +95,12 @@ int CMainFrame::OnCreate (LPCREATESTRUCT lpCreateStruct)
 
 	// Initialize counters and timer. Without a message box: the counters may not be ready right after logon, the timer keeps trying.
 	Initialize (oSettings, TRUE);
+
+	// Without settings this is the first start: older copies of DiskLED can be offered for import, once the program is up
+	if (m_bFirstRun)
+	{
+		PostMessage (WM_FIRST_RUN);
+	}
 
 	return 0;
 }
@@ -267,13 +276,23 @@ DWORD CMainFrame::InitPDH (BOOL bSilent)
 
 void CMainFrame::ShowConfigurationDialog ()
 {
+	OpenSettings (FALSE);
+}
+
+// bImport: the window opens with the wizard at the import of older copies
+void CMainFrame::OpenSettings (BOOL bImport)
+{
 	// This is initialized to NULL
-	static CDialog*	pdlgConfig;
+	static CDialogConfig*	pdlgConfig;
 
 	// Create the dialog object if necessary
 	if (pdlgConfig == NULL)
 	{
 		pdlgConfig	= new CDialogConfig (this);
+		if (bImport)
+		{
+			pdlgConfig->StartWithImport ();
+		}
 	}
 
 	// Make sure the window is not already shown
@@ -338,6 +357,47 @@ afx_msg LRESULT CMainFrame::OnPowerBroadcast(WPARAM wParam, LPARAM)
 LRESULT CMainFrame::OnShowSettings (WPARAM, LPARAM)
 {
 	PostMessage (WM_COMMAND, ID_POPUP_CONFIGURE, 0);
+
+	return 0L;
+}
+
+// The first start, without settings: if older copies of DiskLED are around, offer to take over their meters
+LRESULT CMainFrame::OnFirstRun (WPARAM, LPARAM)
+{
+	std::vector<OldCopy>	aCopies;
+
+	m_bFirstRun	= FALSE;
+	FindOldCopies (aCopies, m_sINIFile);
+
+	// The first start is over, whatever the answer is: store the settings that are running, so this is not asked again
+	DiskLEDSettings	oSettings;
+
+	GetSettings (oSettings);
+	SaveSettings (m_sINIFile, oSettings);
+
+	if (aCopies.empty ())
+	{
+		return 0L;
+	}
+
+	BOOL	bSeveral	= (aCopies.size () > 1);
+	CString	sText		= bSeveral ? TEXT ("DiskLED found older copies of itself on this computer:\n\n") : TEXT ("DiskLED found an older copy of itself on this computer:\n\n");
+
+	for (size_t i = 0; i < aCopies.size () && i < 4; i++)
+	{
+		sText	+= aCopies[i].sIni.Left (aCopies[i].sIni.ReverseFind ('\\')) + TEXT ("\n");
+	}
+	if (aCopies.size () > 4)
+	{
+		sText	+= TEXT ("...\n");
+	}
+	sText	+= bSeveral ? TEXT ("\nDo you want to take over their meters? You can do this later with Add meter, in the settings window.")
+		: TEXT ("\nDo you want to take over its meters? You can do this later with Add meter, in the settings window.");
+
+	if (ShowChoice (this, sText, PROGRAM_NAME, IDI_INFORMATION, TEXT ("Import..."), TEXT ("Not now"), TEXT (""), 2) == 1)
+	{
+		OpenSettings (TRUE);
+	}
 
 	return 0L;
 }
@@ -667,7 +727,8 @@ void CMainFrame::OnClose()
 DWORD CMainFrame::ReadSettings (DiskLEDSettings& oSettings)
 {
 	// The INI file. This also moves the file of an older version from the installation folder to its new place.
-	m_sINIFile	= GetSettingsFile ();
+	m_sINIFile		= GetSettingsFile ();
+	m_bFirstRun		= !IsFileExistent (m_sINIFile);
 
 	return LoadSettings (m_sINIFile, oSettings);
 }

@@ -133,6 +133,9 @@
 #define IDC_WIZ_BACK                    1090
 #define IDC_WIZ_NEXT                    1091
 #define IDC_WIZ_STEP                    1092
+#define IDC_WIZ_IMPORT_LIST             1093
+#define IDC_WIZ_BROWSE                  1094
+#define IDC_WIZ_REMOVE_AUTOSTART        1095
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -147,7 +150,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        176
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1093
+#define _APS_NEXT_CONTROL_VALUE         1096
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

@@ -32,6 +32,7 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_dPreviewTime(0)
 														, m_bLoading(TRUE)
 														, m_bDirty(FALSE)
+														, m_bFirstRunImport(FALSE)
 														, m_nAutoStartSaved(0)
 {
 	if (pMainFrame)
@@ -171,6 +172,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
 	ON_LBN_SELCHANGE(IDC_LIST_METERS, &CDialogConfig::OnLbnSelchangeMeterList)
+	ON_MESSAGE(WM_IMPORT_WIZARD, &CDialogConfig::OnImportWizard)
 	ON_BN_CLICKED(IDC_ADD_METER, &CDialogConfig::OnBnClickedAddMeter)
 	ON_BN_CLICKED(IDC_REMOVE_METER, &CDialogConfig::OnBnClickedRemoveMeter)
 	ON_CBN_SELCHANGE(IDC_COMBO_VALUEFORMAT, &CDialogConfig::OnCbnSelchangeValueFormat)
@@ -690,6 +692,12 @@ BOOL CDialogConfig::OnInitDialog ()
 	UpdatePreview ();
 	UpdateDirtyState ();
 
+	// The first start found older copies: the wizard opens at the import
+	if (m_bFirstRunImport)
+	{
+		PostMessage (WM_IMPORT_WIZARD);
+	}
+
 	// The focus was set by hand
 	return FALSE;
 }
@@ -966,6 +974,10 @@ BOOL CDialogConfig::SaveNow ()
 
 	m_oSaved			= m_oSettings;
 	m_nAutoStartSaved	= m_nAutoStart;
+
+	// The entries of the older copies that were imported go with the Save
+	RemoveRunEntries (m_asPendingRunRemovals);
+	m_asPendingRunRemovals.RemoveAll ();
 	ShowMeterInControls ();
 
 	return TRUE;
@@ -996,6 +1008,7 @@ void CDialogConfig::OnBnClickedRevert ()
 {
 	m_oSettings		= m_oSaved;
 	m_nAutoStart	= m_nAutoStartSaved;
+	m_asPendingRunRemovals.RemoveAll ();
 	if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
 	{
 		m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
@@ -1161,23 +1174,101 @@ void CDialogConfig::OnLbnSelchangeMeterList ()
 
 void CDialogConfig::OnBnClickedAddMeter ()
 {
+	ShowWizard (FALSE);
+}
+
+// Posted when the window opens for the import of the first start
+LRESULT CDialogConfig::OnImportWizard (WPARAM, LPARAM)
+{
+	ShowWizard (TRUE);
+
+	return 0;
+}
+
+void CDialogConfig::ShowWizard (BOOL bStartWithImport)
+{
 	int	nId	= GetFreeMeterId (m_oSettings);
 
-	if (nId == 0 || !ReadControls (TRUE))
+	if (nId == 0)
+	{
+		ShowMessage (this, TEXT ("There can be at most 16 meters. Remove one to add another."), TEXT ("DiskLED: Add a meter"), MB_OK | MB_ICONEXCLAMATION);
+		return;
+	}
+	if (!ReadControls (TRUE))
 	{
 		return;
 	}
+	SaveControlsToMeter (m_nCounterSel);
+	SaveGlobalFromControls ();
 
-	// The wizard makes the new meter. "Another counter" makes a copy of the current meter, to be set up with the lists.
-	CDialogWizard	oWizard (this);
+	// The wizard makes the new meter, or takes over meters of older copies. "Another counter" makes a copy of the current meter, to be set up with the lists.
+	CDialogWizard	oWizard (this, m_oSettings, bStartWithImport);
 
 	if (oWizard.DoModal () != IDOK)
 	{
 		return;
 	}
 
-	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
+	if (oWizard.m_bImport)
+	{
+		int	nSkipped	= 0;
+
+		// At the first start the default meter is only a placeholder: the imported meters replace it
+		DiskLEDSettings	oDefault;
+
+		SetDefaultSettings (oDefault);
+		if (m_bFirstRunImport && AreSettingsEqual (m_oSettings, oDefault))
+		{
+			m_oSettings.aMeters.clear ();
+		}
+		m_bFirstRunImport	= FALSE;
+
+		int	nFirstId	= 0;
+		for (size_t i = 0; i < oWizard.m_aImported.size (); i++)
+		{
+			MeterSettings	oMeter	= oWizard.m_aImported[i];
+
+			oMeter.nId	= GetFreeMeterId (m_oSettings);
+			if (oMeter.nId == 0)
+			{
+				nSkipped++;
+				continue;
+			}
+			nFirstId	= (nFirstId == 0) ? oMeter.nId : nFirstId;
+			m_oSettings.aMeters.push_back (oMeter);
+			NormalizeSettings (m_oSettings);
+		}
+
+		// What the user asked for is done when the settings are saved
+		for (int i = 0; i < oWizard.m_asRunEntries.GetSize (); i++)
+		{
+			m_asPendingRunRemovals.Add (oWizard.m_asRunEntries[i]);
+		}
+
+		for (size_t i = 0; i < m_oSettings.aMeters.size (); i++)
+		{
+			if (m_oSettings.aMeters[i].nId == nFirstId)
+			{
+				m_nCounterSel	= (int) i;
+			}
+		}
+		if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
+		{
+			m_nCounterSel	= 0;
+		}
+
+		ShowMeterInControls ();
+		CommitChanges ();
+		if (nSkipped > 0)
+		{
+			CString	sText;
+
+			sText.Format (TEXT ("There can be at most 16 meters, %d of the imported meters could not be added."), nSkipped);
+			ShowMessage (this, sText, TEXT ("DiskLED: Import"), MB_OK | MB_ICONEXCLAMATION);
+		}
+		m_cMeterList.SetFocus ();
+		return;
+	}
 
 	MeterSettings	oMeter	= oWizard.m_bManual ? m_oSettings.aMeters[m_nCounterSel] : oWizard.m_oMeter;
 

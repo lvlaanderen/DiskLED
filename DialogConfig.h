@@ -13,6 +13,9 @@
 #define CHANGE_TIMER_ID			2
 #define CHANGE_DELAY_MS			250
 
+// Posted to the dialog itself: open the wizard at the import
+#define WM_IMPORT_WIZARD		(WM_APP + 20)
+
 
 // CDialogConfig dialog
 
@@ -23,6 +26,9 @@ class CDialogConfig : public CDialog
 public:
 	CDialogConfig(CMainFrame* pMainFrame);   // standard constructor
 	virtual ~CDialogConfig();
+
+	// The first start of DiskLED found older copies: open the wizard at the import when the window opens. The default meter makes room for what is imported.
+	void	StartWithImport ()		{ m_bFirstRunImport = TRUE; }
 
 // Dialog Data
 	enum { IDD = IDD_DIALOG_CONFIG };
@@ -115,6 +121,8 @@ private:
 	int				m_nAutoStartSaved;
 	BOOL			m_bLoading;				// The controls are being filled: their notifications are not changes
 	BOOL			m_bDirty;
+	BOOL			m_bFirstRunImport;		// See StartWithImport
+	CStringArray	m_asPendingRunRemovals;	// Start with Windows entries of imported copies, removed when the settings are saved
 
 	// Preview
 	IconStyle		m_oPreviewStyle;
@@ -146,6 +154,7 @@ private:
 	void		FillMeterList ();
 	CString		GetMeterListText (int nMeter);
 	void		UpdateMeterButtons ();
+	void		ShowWizard (BOOL bStartWithImport);
 	void		UpdateSwatches ();
 	void		UpdatePreview ();
 	BOOL		Read100Percent (BOOL bReport);
@@ -172,6 +181,7 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
 	afx_msg void OnLbnSelchangeMeterList();
+	afx_msg LRESULT OnImportWizard(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnBnClickedAddMeter();
 	afx_msg void OnBnClickedRemoveMeter();
 	afx_msg void OnTcnSelchangeTab(NMHDR* pNMHDR, LRESULT* pResult);

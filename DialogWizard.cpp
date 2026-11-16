@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include <afxdlgs.h>
 #include "DiskLED.h"
 #include "DialogWizard.h"
 #include "DialogMessage.h"
@@ -16,6 +17,7 @@
 #define WHAT_PROCESSOR		3
 #define WHAT_MEMORY			4
 #define WHAT_OTHER			5
+#define WHAT_IMPORT			6
 
 struct WhatEntry
 {
@@ -32,7 +34,8 @@ static const WhatEntry g_aWhat[] =
 	{ TEXT ("Disk activity"),			TEXT ("How busy a disk is, like the activity light of a computer."),										TEXT ("Disk"),		LEDTYPE_FLICKER },
 	{ TEXT ("Processor use"),			TEXT ("How hard the processor is working."),																TEXT ("Processor"),	LEDTYPE_COLOREDBAR },
 	{ TEXT ("Memory in use"),			TEXT ("How much of the memory of the computer is in use."),													TEXT ("Memory"),	LEDTYPE_CLEANBAR },
-	{ TEXT ("Another counter..."),		TEXT ("Choose any performance counter yourself, with the lists in the settings window."),					TEXT (""),			LEDTYPE_FLICKER }
+	{ TEXT ("Another counter..."),		TEXT ("Choose any performance counter yourself, with the lists in the settings window."),					TEXT (""),			LEDTYPE_FLICKER },
+	{ TEXT ("Import from an older DiskLED..."),	TEXT ("Take over the meters of older copies of DiskLED, for example if you ran one copy for every counter."),	TEXT (""),	LEDTYPE_FLICKER }
 };
 
 
@@ -43,7 +46,9 @@ BEGIN_MESSAGE_MAP(CDialogWizard, CDialog)
 	ON_COMMAND(IDCANCEL, &CDialogWizard::OnCancel)
 	ON_COMMAND(IDC_WIZ_BACK, &CDialogWizard::OnBack)
 	ON_COMMAND(IDC_WIZ_NEXT, &CDialogWizard::OnNext)
+	ON_COMMAND(IDC_WIZ_BROWSE, &CDialogWizard::OnBrowse)
 	ON_LBN_SELCHANGE(IDC_WIZ_LIST, &CDialogWizard::OnLbnSelchangeList)
+	ON_LBN_SELCHANGE(IDC_WIZ_IMPORT_LIST, &CDialogWizard::OnLbnSelchangeImportList)
 	ON_CBN_SELCHANGE(IDC_WIZ_ICON, &CDialogWizard::OnChangedLook)
 	ON_WM_CTLCOLOR()
 	ON_WM_SETTINGCHANGE()
@@ -53,8 +58,9 @@ BEGIN_MESSAGE_MAP(CDialogWizard, CDialog)
 END_MESSAGE_MAP()
 
 
-CDialogWizard::CDialogWizard (CWnd* pParent)
-	: CDialog (CDialogWizard::IDD, pParent), m_bManual (FALSE), m_nStep (1), m_nWhat (WHAT_DOWNLOAD), m_bLoading (TRUE), m_dPreviewTime (0)
+CDialogWizard::CDialogWizard (CWnd* pParent, const DiskLEDSettings& oCurrent, BOOL bStartWithImport)
+	: CDialog (CDialogWizard::IDD, pParent), m_bManual (FALSE), m_bImport (FALSE), m_oCurrent (oCurrent), m_bStartWithImport (bStartWithImport)
+	, m_nStep (1), m_nWhat (WHAT_DOWNLOAD), m_bLoading (TRUE), m_dPreviewTime (0)
 {
 	SetDefaultMeterSettings (m_oMeter, 0);
 	SecureZeroMemory (&m_oStyle, sizeof (m_oStyle));
@@ -73,6 +79,7 @@ BOOL CDialogWizard::OnInitDialog ()
 	CDialog::OnInitDialog ();
 
 	m_cList.SubclassDlgItem (IDC_WIZ_LIST, this);
+	m_cImportList.SubclassDlgItem (IDC_WIZ_IMPORT_LIST, this);
 	m_cName.SubclassDlgItem (IDC_WIZ_NAME, this);
 	m_cIcon.SubclassDlgItem (IDC_WIZ_ICON, this);
 	m_cPreview.SubclassDlgItem (IDC_WIZ_PREVIEW, this);
@@ -103,7 +110,15 @@ BOOL CDialogWizard::OnInitDialog ()
 
 	CenterOnPointerMonitor (this);
 
-	ShowStep (1);
+	if (m_bStartWithImport)
+	{
+		m_nWhat	= WHAT_IMPORT;
+		ShowStep (2);
+	}
+	else
+	{
+		ShowStep (1);
+	}
 	m_bLoading	= FALSE;
 
 	SetTimer (WIZARD_TIMER_ID, WIZARD_INTERVAL_MS, NULL);
@@ -156,23 +171,31 @@ void CDialogWizard::OnOK ()
 
 void CDialogWizard::ShowStep (int nStep)
 {
-	static const UINT aListControls[]	= { IDC_WIZ_LIST, IDC_WIZ_DESC };
+	static const UINT aListControls[]	= { IDC_WIZ_LIST };
+	static const UINT aImportControls[]	= { IDC_WIZ_IMPORT_LIST, IDC_WIZ_BROWSE, IDC_WIZ_REMOVE_AUTOSTART };
 	static const UINT aLookControls[]	= { IDC_WIZ_NAME_LABEL, IDC_WIZ_NAME, IDC_WIZ_ICON_LABEL, IDC_WIZ_ICON, IDC_WIZ_PREVIEW };
+
+	BOOL	bImport	= (nStep == 2 && m_nWhat == WHAT_IMPORT);
 
 	m_nStep	= nStep;
 
 	for (int i = 0; i < _countof (aListControls); i++)
 	{
-		GetDlgItem (aListControls[i])->ShowWindow (nStep < 3 ? SW_SHOW : SW_HIDE);
+		GetDlgItem (aListControls[i])->ShowWindow ((nStep < 3 && !bImport) ? SW_SHOW : SW_HIDE);
+	}
+	for (int i = 0; i < _countof (aImportControls); i++)
+	{
+		GetDlgItem (aImportControls[i])->ShowWindow (bImport ? SW_SHOW : SW_HIDE);
 	}
 	for (int i = 0; i < _countof (aLookControls); i++)
 	{
 		GetDlgItem (aLookControls[i])->ShowWindow (nStep == 3 ? SW_SHOW : SW_HIDE);
 	}
+	GetDlgItem (IDC_WIZ_DESC)->ShowWindow (nStep < 3 ? SW_SHOW : SW_HIDE);
 
-	// Memory is only one thing, so it has no second step
+	// Memory is only one thing, so it has no second step, and the import has no third
 	CString	sStep;
-	int		nTotal		= (m_nWhat == WHAT_MEMORY) ? 2 : 3;
+	int		nTotal		= (m_nWhat == WHAT_MEMORY || m_nWhat == WHAT_IMPORT) ? 2 : 3;
 	int		nShown		= (m_nWhat == WHAT_MEMORY && nStep == 3) ? 2 : nStep;
 
 	sStep.Format (TEXT ("Step %d of %d"), nShown, nTotal);
@@ -184,6 +207,13 @@ void CDialogWizard::ShowStep (int nStep)
 		SetDlgItemText (IDC_WIZ_HINT, TEXT ("Every meter is one icon in the tray. You can add more meters later."));
 		FillWhatList ();
 		m_cList.SetFocus ();
+	}
+	else if (bImport)
+	{
+		SetDlgItemText (IDC_WIZ_TITLE, TEXT ("Import from an older DiskLED"));
+		SetDlgItemText (IDC_WIZ_HINT, TEXT ("Select the meters to take over. The older copies are not changed or stopped: close them from their tray menu when you are done."));
+		FillImportList ();
+		m_cImportList.SetFocus ();
 	}
 	else if (nStep == 2)
 	{
@@ -309,18 +339,27 @@ void CDialogWizard::UpdateDescription ()
 	SetDlgItemText (IDC_WIZ_DESC, (m_nStep == 1 && nSel >= 0) ? g_aWhat[nSel].sDescription : TEXT (""));
 }
 
-// The last step, and "another counter", add the meter instead of going on
+// The last step, "another counter" and the import add the meters instead of going on
 void CDialogWizard::UpdateButtons ()
 {
+	BOOL	bImport	= (m_nStep == 2 && m_nWhat == WHAT_IMPORT);
 	BOOL	bFinish	= (m_nStep == 3) || (m_nStep == 1 && m_cList.GetCurSel () == WHAT_OTHER);
 
 	GetDlgItem (IDC_WIZ_BACK)->EnableWindow (m_nStep > 1);
-	SetDlgItemText (IDC_WIZ_NEXT, bFinish ? TEXT ("&Add meter") : TEXT ("&Next >"));
+	SetDlgItemText (IDC_WIZ_NEXT, bImport ? TEXT ("&Import") : (bFinish ? TEXT ("&Add meter") : TEXT ("&Next >")));
+
+	// There must be something to import
+	GetDlgItem (IDC_WIZ_NEXT)->EnableWindow (!bImport || m_cImportList.GetSelCount () > 0);
 }
 
 void CDialogWizard::OnLbnSelchangeList ()
 {
 	UpdateDescription ();
+	UpdateButtons ();
+}
+
+void CDialogWizard::OnLbnSelchangeImportList ()
+{
 	UpdateButtons ();
 }
 
@@ -340,6 +379,15 @@ void CDialogWizard::OnNext ()
 {
 	int	nSel	= m_cList.GetCurSel ();
 
+	if (m_nStep == 2 && m_nWhat == WHAT_IMPORT)
+	{
+		if (CollectImport ())
+		{
+			EndDialog (IDOK);
+		}
+		return;
+	}
+
 	if (m_nStep == 1)
 	{
 		if (nSel < 0)
@@ -352,6 +400,11 @@ void CDialogWizard::OnNext ()
 		{
 			m_bManual	= TRUE;
 			EndDialog (IDOK);
+			return;
+		}
+		if (m_nWhat == WHAT_IMPORT)
+		{
+			ShowStep (2);
 			return;
 		}
 		if (m_nWhat == WHAT_MEMORY)
@@ -381,6 +434,176 @@ void CDialogWizard::OnNext ()
 	{
 		EndDialog (IDOK);
 	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The import: the meters of older copies of DiskLED. Every meter is a line of the list, selected lines are taken over.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// Does this meter exist already, with the same counter?
+BOOL CDialogWizard::IsCurrentMeter (const MeterSettings& oMeter) const
+{
+	CString	sPath	= LocalPathToEnglish (oMeter.oCounter.sPath);
+
+	for (size_t i = 0; i < m_oCurrent.aMeters.size (); i++)
+	{
+		if (m_oCurrent.aMeters[i].oCounter.sPath.CompareNoCase (sPath) == 0)
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+void CDialogWizard::AddCopyToImportList (int nCopy, BOOL bSelect)
+{
+	const OldCopy&	oCopy	= m_aCopies[nCopy];
+
+	for (size_t i = 0; i < oCopy.oSettings.aMeters.size (); i++)
+	{
+		const MeterSettings&	oMeter		= oCopy.oSettings.aMeters[i];
+		CString					sMachine;
+		CString					sObject;
+		CString					sInstance;
+		CString					sCounter;
+		CString					sPath		= oMeter.oCounter.sPath;
+		CString					sText;
+		BOOL					bDouble		= IsCurrentMeter (oMeter);
+		ImportEntry				oEntry;
+
+		if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
+		{
+			sCounter	= sPath;
+		}
+		sText	= GetOldCopyName (oCopy) + TEXT (":  ") + sCounter;
+		if (!sInstance.IsEmpty ())
+		{
+			sText	+= TEXT (" (") + sInstance + TEXT (")");
+		}
+		if (bDouble)
+		{
+			sText	+= TEXT ("  - you have this meter already");
+		}
+
+		oEntry.nCopy	= nCopy;
+		oEntry.nMeter	= (int) i;
+		m_aEntries.push_back (oEntry);
+
+		int	nIndex	= m_cImportList.AddString (sText);
+		if (bSelect && !bDouble)
+		{
+			m_cImportList.SetSel (nIndex, TRUE);
+		}
+	}
+}
+
+void CDialogWizard::FillImportList ()
+{
+	CWaitCursor	oWait;
+
+	m_cImportList.ResetContent ();
+	m_aEntries.clear ();
+	FindOldCopies (m_aCopies, GetSettingsFile ());
+
+	for (size_t i = 0; i < m_aCopies.size (); i++)
+	{
+		AddCopyToImportList ((int) i, TRUE);
+	}
+
+	// Removing entries is only possible for copies that have one
+	BOOL	bEntries	= FALSE;
+	for (size_t i = 0; i < m_aCopies.size (); i++)
+	{
+		bEntries	= bEntries || !m_aCopies[i].sRunName.IsEmpty ();
+	}
+	GetDlgItem (IDC_WIZ_REMOVE_AUTOSTART)->EnableWindow (bEntries);
+
+	SetDlgItemText (IDC_WIZ_DESC, m_aCopies.empty ()
+		? TEXT ("No older copy of DiskLED was found, with a DiskLED.ini next to it. If you know where it is, choose its DiskLED.ini with Browse.")
+		: TEXT ("Shortcuts in the Startup folder are not removed, that is up to you."));
+}
+
+// Choose the INI file of a copy that was not found
+void CDialogWizard::OnBrowse ()
+{
+	CFileDialog	oDialog (TRUE, TEXT ("ini"), NULL, OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST,
+		TEXT ("DiskLED settings (*.ini)|*.ini|All files (*.*)|*.*||"), this);
+	OldCopy		oCopy;
+
+	if (oDialog.DoModal () != IDOK)
+	{
+		return;
+	}
+	if (!LoadOldCopy (oDialog.GetPathName (), oCopy))
+	{
+		ShowMessage (this, TEXT ("This file does not contain DiskLED settings."), TEXT ("DiskLED: Import"), MB_OK | MB_ICONEXCLAMATION);
+		return;
+	}
+
+	// A copy that is in the list already is not added again
+	for (size_t i = 0; i < m_aCopies.size (); i++)
+	{
+		if (m_aCopies[i].sIni.CompareNoCase (oCopy.sIni) == 0)
+		{
+			return;
+		}
+	}
+
+	m_aCopies.push_back (oCopy);
+	AddCopyToImportList ((int) m_aCopies.size () - 1, TRUE);
+	SetDlgItemText (IDC_WIZ_DESC, TEXT ("Shortcuts in the Startup folder are not removed, that is up to you."));
+	UpdateButtons ();
+}
+
+// The selected meters, with their counter paths in English, and the Start with Windows entries to remove
+BOOL CDialogWizard::CollectImport ()
+{
+	BOOL	bRemove	= (IsDlgButtonChecked (IDC_WIZ_REMOVE_AUTOSTART) == BST_CHECKED);
+
+	m_aImported.clear ();
+	m_asRunEntries.RemoveAll ();
+
+	for (int i = 0; i < m_cImportList.GetCount () && i < (int) m_aEntries.size (); i++)
+	{
+		if (m_cImportList.GetSel (i) <= 0)
+		{
+			continue;
+		}
+
+		const OldCopy&	oCopy	= m_aCopies[m_aEntries[i].nCopy];
+		MeterSettings	oMeter	= oCopy.oSettings.aMeters[m_aEntries[i].nMeter];
+
+		oMeter.nId					= 0;
+		oMeter.oCounter.sPath		= LocalPathToEnglish (oMeter.oCounter.sPath);
+		m_aImported.push_back (oMeter);
+
+		if (bRemove && !oCopy.sRunName.IsEmpty ())
+		{
+			BOOL	bListed	= FALSE;
+
+			for (int j = 0; j < m_asRunEntries.GetSize (); j++)
+			{
+				bListed	= bListed || (m_asRunEntries[j].CompareNoCase (oCopy.sRunName) == 0);
+			}
+			if (!bListed)
+			{
+				m_asRunEntries.Add (oCopy.sRunName);
+			}
+		}
+	}
+
+	if (m_aImported.empty ())
+	{
+		return FALSE;
+	}
+
+	m_bImport	= TRUE;
+
+	return TRUE;
 }
 
 
