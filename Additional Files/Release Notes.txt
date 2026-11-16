@@ -6,6 +6,31 @@ The original DiskLED by Helge Klein:  https://helgeklein.com/free-tools/diskled/
 DiskLED is licensed under the Apache License 2.0, see LICENSE.txt.
 
 
+#### Version 3.0.0 (fork) ####
+
+Several meters in one program:
+- Until now every counter needed its own folder with its own program and settings file. Now one DiskLED shows as many meters as you like, each one as its own icon in the tray. You can move and promote the icons individually.
+- A second counter is now simply a second meter, with its own icon. Your existing settings are converted when you first save them, a file with a second counter becomes two meters.
+- Every meter has its own data source, icon type, colours, scale and warning, and an optional name that is shown in its tooltip and in warnings. The update interval is shared.
+- A counter that cannot be read (for example a network adapter that is not there) only affects its own icon. The other meters keep running.
+
+Easier setup:
+- A wizard adds a meter in three steps: what to monitor (internet download or upload speed, disk, processor, memory or another counter), which adapter, disk or processor, and how it looks, with a preview.
+- The settings window lists the meters on the left. Changes are shown on the tray icons right away. Save keeps them, Revert goes back, and closing with unsaved changes asks what to do. The Update INI checkbox and the Apply button are gone.
+- All messages follow the Windows theme (dark or light), not only the settings window.
+- The settings window opens on the screen where you clicked the tray icon.
+
+Settings and installation:
+- The settings are now stored in %AppData%\DiskLED\DiskLED.ini, so DiskLED can be installed in a folder that you cannot write to, such as Program Files. A DiskLED.ini next to the program from an older version is copied there the first time.
+- Portable use: a file called "portable" next to DiskLED.exe keeps the settings next to the program, as before. The zip download contains this file.
+- There is an installer now. It lets you choose between Program Files (all users) and a folder for the current user, and offers to start DiskLED with Windows. The zip stays available for portable use.
+- Only one DiskLED runs per user. Starting it again opens the settings of the running one. There is a single Start with Windows entry, an entry of an older version for the same program is replaced.
+- If you ran several copies of DiskLED in several folders: install or unzip version 3.0 once and add a meter for each counter with the wizard. The settings of the other copies are not imported.
+
+Changed:
+- INI files: the settings of a meter are in a section [Meter n], the update interval is in [General]. See the README. Older files are still read.
+
+
 #### Version 2.1.0 (fork) ####
 
 Settings in DiskLED.ini from version 2.0 and older keep working. Version 2.0 stays available on the releases page.
