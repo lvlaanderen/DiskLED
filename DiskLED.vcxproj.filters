@@ -24,6 +24,9 @@
     <ClCompile Include="DialogMessage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DialogWizard.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="DarkMode.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -60,6 +63,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DialogMessage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DialogWizard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DarkMode.h">

@@ -47,6 +47,7 @@
 #define IDS_TOOLTIP_SAVE                172
 #define IDS_TOOLTIP_REVERT              173
 #define IDS_TOOLTIP_METERNAME           174
+#define IDD_DIALOG_WIZARD               175
 #define IDC_ABOUT_ICON1                 1000
 #define IDC_SYSLINK_URL1                1001
 #define IDC_SYSLINK_URL2                1002
@@ -120,6 +121,18 @@
 #define IDC_MSG_BTN1                    1078
 #define IDC_MSG_BTN2                    1079
 #define IDC_MSG_BTN3                    1080
+#define IDC_WIZ_TITLE                   1081
+#define IDC_WIZ_HINT                    1082
+#define IDC_WIZ_LIST                    1083
+#define IDC_WIZ_DESC                    1084
+#define IDC_WIZ_NAME_LABEL              1085
+#define IDC_WIZ_NAME                    1086
+#define IDC_WIZ_ICON_LABEL              1087
+#define IDC_WIZ_ICON                    1088
+#define IDC_WIZ_PREVIEW                 1089
+#define IDC_WIZ_BACK                    1090
+#define IDC_WIZ_NEXT                    1091
+#define IDC_WIZ_STEP                    1092
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -132,9 +145,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        175
+#define _APS_NEXT_RESOURCE_VALUE        176
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1081
+#define _APS_NEXT_CONTROL_VALUE         1093
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

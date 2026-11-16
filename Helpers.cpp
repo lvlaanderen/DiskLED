@@ -2,6 +2,7 @@
 #include "Helpers.h"
 #include "Settings.h"
 #include <pdh.h>
+#include <PDHMsg.h>
 #include <iphlpapi.h>
 #include <shlobj.h>
 
@@ -583,6 +584,67 @@ CString EnglishPathToLocal (const CString& sPath)
 	CString	sLocal	= MakePerfPath (sMachine, EnglishNameToLocal (sObject), sInstance, EnglishNameToLocal (sCounter));
 
 	return (PdhValidatePath (sLocal) == ERROR_SUCCESS) ? sLocal : sPath;
+}
+
+
+// Is this a valid counter path when interpreted as English?
+BOOL IsValidEnglishCounterPath (const CString& sPath)
+{
+	return IsValidEnglishPath (sPath);
+}
+
+// Center a window on the monitor with the mouse pointer. The hidden main window is no place to center on, it can be on another monitor.
+void CenterOnPointerMonitor (CWnd* pWindow)
+{
+	POINT		oCursor;
+	MONITORINFO	oMonitor;
+	CRect		oWindow;
+
+	GetCursorPos (&oCursor);
+	oMonitor.cbSize	= sizeof (oMonitor);
+	if (GetMonitorInfo (MonitorFromPoint (oCursor, MONITOR_DEFAULTTOPRIMARY), &oMonitor))
+	{
+		pWindow->GetWindowRect (oWindow);
+		pWindow->SetWindowPos (NULL, oMonitor.rcWork.left + (oMonitor.rcWork.right - oMonitor.rcWork.left - oWindow.Width ()) / 2,
+			oMonitor.rcWork.top + (oMonitor.rcWork.bottom - oMonitor.rcWork.top - oWindow.Height ()) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	}
+}
+
+// The instances of a performance object (an English name, e.g. "Network Interface"), as the counters know them
+void GetPerfInstances (const CString& sEnglishObject, CStringArray& asInstances)
+{
+	CString	sObject		= EnglishNameToLocal (sEnglishObject);
+	DWORD	nCounters	= 0;
+	DWORD	nInstances	= 0;
+
+	asInstances.RemoveAll ();
+
+	// The first call returns the sizes of the lists
+	if (PdhEnumObjectItems (NULL, NULL, sObject, NULL, &nCounters, NULL, &nInstances, PERF_DETAIL_WIZARD, 0) != PDH_MORE_DATA || nInstances == 0)
+	{
+		return;
+	}
+
+	TCHAR*	sCounters	= (TCHAR*) HeapAlloc (GetProcessHeap (), HEAP_ZERO_MEMORY, sizeof (TCHAR) * (nCounters + 2));
+	TCHAR*	sInstances	= (TCHAR*) HeapAlloc (GetProcessHeap (), HEAP_ZERO_MEMORY, sizeof (TCHAR) * (nInstances + 2));
+
+	if (sCounters != NULL && sInstances != NULL
+		&& PdhEnumObjectItems (NULL, NULL, sObject, sCounters, &nCounters, sInstances, &nInstances, PERF_DETAIL_WIZARD, 0) == ERROR_SUCCESS)
+	{
+		for (const TCHAR* sName = sInstances; *sName != 0; sName += _tcslen (sName) + 1)
+		{
+			asInstances.Add (sName);
+		}
+	}
+
+	if (sCounters != NULL)
+	{
+		HeapFree (GetProcessHeap (), 0, sCounters);
+	}
+	if (sInstances != NULL)
+	{
+		HeapFree (GetProcessHeap (), 0, sInstances);
+	}
 }
 
 

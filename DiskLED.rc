@@ -190,6 +190,27 @@ BEGIN
     PUSHBUTTON      "",IDC_MSG_BTN3,180,50,56,14
 END
 
+IDD_DIALOG_WIZARD DIALOGEX 0, 0, 300, 202
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Add a meter"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "",IDC_WIZ_STEP,12,8,276,8
+    LTEXT           "",IDC_WIZ_TITLE,12,19,276,16
+    LTEXT           "",IDC_WIZ_HINT,12,38,276,18
+    LISTBOX         IDC_WIZ_LIST,12,58,276,88,LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "",IDC_WIZ_DESC,12,150,276,26
+    LTEXT           "&Name:",IDC_WIZ_NAME_LABEL,12,62,40,8
+    EDITTEXT        IDC_WIZ_NAME,60,60,140,12,ES_AUTOHSCROLL
+    LTEXT           "&Icon:",IDC_WIZ_ICON_LABEL,12,86,40,8
+    COMBOBOX        IDC_WIZ_ICON,60,84,100,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_WIZ_PREVIEW,"Static",SS_OWNERDRAW,208,60,80,80,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,0,181,300,1
+    PUSHBUTTON      "< &Back",IDC_WIZ_BACK,129,185,52,14
+    DEFPUSHBUTTON   "&Next >",IDC_WIZ_NEXT,185,185,52,14
+    PUSHBUTTON      "Cancel",IDCANCEL,241,185,52,14
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -330,7 +351,7 @@ BEGIN
     IDS_TOOLTIP_METERNAME   "A name for this meter, shown in its tooltip and in the list. Optional."
     IDS_TOOLTIP_SCALEMODE   "What corresponds to the full icon. Fixed: the 100% value. Peak: the highest of the last 16 values. Decay: a peak that slowly falls (halves in 30 s). Auto: the highest value DiskLED has seen, remembered in the INI file and falling very slowly (halves in a day). With Peak, Decay and Auto the 100% value is the minimum."
     IDS_TOOLTIP_COUNTERSEL  "The meters. Each meter is one tray icon with its own data source, 100% value, format, scale, icon and warning. The settings below belong to the meter shown here."
-    IDS_TOOLTIP_ADD_METER   "Add a meter (a tray icon). It starts as a copy of the meter shown, change its data source below."
+    IDS_TOOLTIP_ADD_METER   "Add a meter (a tray icon). A short wizard helps you choose what to monitor."
     IDS_TOOLTIP_REMOVE_METER "Remove the meter that is shown, and its tray icon."
     IDS_TOOLTIP_ALERT       "Show a notification when the value stays above this percentage of the scale (the value that fills the icon) for this many seconds. 0% turns the warning off."
     IDS_TOOLTIP_DEFAULT_VALUES "Replace all meters by one default meter. Like every change, this can be undone with Revert until you Save."

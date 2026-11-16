@@ -22,6 +22,15 @@ CString	MakePerfPath (const CString& sMachine, const CString& sObject, const CSt
 CString	LocalPathToEnglish (const CString& sPath);
 CString	EnglishPathToLocal (const CString& sPath);
 
+// Is this a valid counter path when read as an English path?
+BOOL	IsValidEnglishCounterPath (const CString& sPath);
+
+// The instances of a performance object (an English object name, e.g. "Network Interface"), as the counters know them
+void	GetPerfInstances (const CString& sEnglishObject, CStringArray& asInstances);
+
+// Center a window on the monitor with the mouse pointer (where the user clicked the tray icon)
+void	CenterOnPointerMonitor (CWnd* pWindow);
+
 // The speed of the network adapter of a \Network Interface(<instance>)\Bytes ... counter (an English path), in bytes/s. Not the speed of the internet connection!
 BOOL	GetNetworkLinkSpeed (const CString& sEnglishPath, double& dBytesPerSec);
 

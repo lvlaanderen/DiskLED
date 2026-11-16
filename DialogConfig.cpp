@@ -6,6 +6,7 @@
 #include "MainFrm.h"
 #include "DialogConfig.h"
 #include "DialogMessage.h"
+#include "DialogWizard.h"
 #include "Helpers.h"
 #include <math.h>
 
@@ -678,21 +679,8 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Set the initial focus to the name of the meter
 	m_cMeterName.SetFocus ();
 
-	// The hidden main window is not a place to center on (it may be on another monitor): use the monitor with the mouse pointer, which is where the user clicked the tray icon
-	{
-		POINT		oCursor;
-		MONITORINFO	oMonitor;
-		CRect		oWindow;
-
-		GetCursorPos (&oCursor);
-		oMonitor.cbSize	= sizeof (oMonitor);
-		if (GetMonitorInfo (MonitorFromPoint (oCursor, MONITOR_DEFAULTTOPRIMARY), &oMonitor))
-		{
-			GetWindowRect (oWindow);
-			SetWindowPos (NULL, oMonitor.rcWork.left + (oMonitor.rcWork.right - oMonitor.rcWork.left - oWindow.Width ()) / 2,
-				oMonitor.rcWork.top + (oMonitor.rcWork.bottom - oMonitor.rcWork.top - oWindow.Height ()) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-		}
-	}
+	// The hidden main window is not a place to center on (it may be on another monitor)
+	CenterOnPointerMonitor (this);
 
 	// Initialize the performance browser controls
 	InitPerfBrowser ();
@@ -1179,14 +1167,26 @@ void CDialogConfig::OnBnClickedAddMeter ()
 	{
 		return;
 	}
+
+	// The wizard makes the new meter. "Another counter" makes a copy of the current meter, to be set up with the lists.
+	CDialogWizard	oWizard (this);
+
+	if (oWizard.DoModal () != IDOK)
+	{
+		return;
+	}
+
 	SaveControlsToMeter (m_nCounterSel);
 	SaveGlobalFromControls ();
 
-	MeterSettings	oMeter	= m_oSettings.aMeters[m_nCounterSel];
+	MeterSettings	oMeter	= oWizard.m_bManual ? m_oSettings.aMeters[m_nCounterSel] : oWizard.m_oMeter;
 
 	oMeter.nId						= nId;
-	oMeter.sName					= TEXT ("");
 	oMeter.oCounter.dLearnedMax		= 0;
+	if (oWizard.m_bManual)
+	{
+		oMeter.sName	= TEXT ("");
+	}
 	m_oSettings.aMeters.push_back (oMeter);
 	NormalizeSettings (m_oSettings);
 
@@ -1201,7 +1201,16 @@ void CDialogConfig::OnBnClickedAddMeter ()
 
 	ShowMeterInControls ();
 	CommitChanges ();
-	m_cMeterName.SetFocus ();
+	if (oWizard.m_bManual)
+	{
+		m_cTab.SetCurSel (0);
+		ShowPage (0);
+		m_cQuickPick.SetFocus ();
+	}
+	else
+	{
+		m_cMeterName.SetFocus ();
+	}
 }
 
 
