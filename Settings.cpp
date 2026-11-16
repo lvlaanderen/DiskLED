@@ -258,6 +258,11 @@ CString GetMeterSection (int nId)
 
 void NormalizeMeterSettings (MeterSettings& oMeter)
 {
+	oMeter.sName.Trim ();
+	if (oMeter.sName.GetLength () > MAX_METER_NAME)
+	{
+		oMeter.sName.Truncate (MAX_METER_NAME);
+	}
 	if (oMeter.nIconType < LEDTYPE_FLICKER || oMeter.nIconType > LEDTYPE_NUMBER)
 	{
 		oMeter.nIconType	= DEFAULT_ICONTYPE;
@@ -380,6 +385,48 @@ void NormalizeSettings (DiskLEDSettings& oSettings)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//	Are the settings the same? Both are corrected like they would be when used. The learned maximum is left out, it changes while running.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+BOOL AreSettingsEqual (const DiskLEDSettings& oFirst, const DiskLEDSettings& oSecond)
+{
+	DiskLEDSettings	oA	= oFirst;
+	DiskLEDSettings	oB	= oSecond;
+
+	NormalizeSettings (oA);
+	NormalizeSettings (oB);
+
+	if (oA.nUpdateInterval != oB.nUpdateInterval || oA.aMeters.size () != oB.aMeters.size ())
+	{
+		return FALSE;
+	}
+
+	for (size_t i = 0; i < oA.aMeters.size (); i++)
+	{
+		const MeterSettings&	oMeterA	= oA.aMeters[i];
+		const MeterSettings&	oMeterB	= oB.aMeters[i];
+		const CounterSettings&	oCounterA	= oMeterA.oCounter;
+		const CounterSettings&	oCounterB	= oMeterB.oCounter;
+
+		if (oMeterA.nId != oMeterB.nId || oMeterA.sName != oMeterB.sName || oMeterA.nIconType != oMeterB.nIconType
+			|| oMeterA.nThresholdMid != oMeterB.nThresholdMid || oMeterA.nThresholdHigh != oMeterB.nThresholdHigh
+			|| oMeterA.anColors[0] != oMeterB.anColors[0] || oMeterA.anColors[1] != oMeterB.anColors[1] || oMeterA.anColors[2] != oMeterB.anColors[2]
+			|| oCounterA.sPath.CompareNoCase (oCounterB.sPath) != 0 || oCounterA.d100Percent != oCounterB.d100Percent
+			|| oCounterA.nValueFormat != oCounterB.nValueFormat || oCounterA.nScaleMode != oCounterB.nScaleMode
+			|| (oCounterA.bInvert != 0) != (oCounterB.bInvert != 0) || oCounterA.nAlertPercent != oCounterB.nAlertPercent
+			|| oCounterA.nAlertSeconds != oCounterB.nAlertSeconds)
+		{
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //	Read the settings of one counter from an INI section. Values not found keep their previous value.
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -440,6 +487,10 @@ static void LoadMeterStyle (const CString& sINIFile, const CString& sSection, Me
 {
 	CString	sData;
 
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_NAME, &sData) == ERROR_SUCCESS)
+	{
+		oMeter.sName	= sData;
+	}
 	if (ReadINIValue (sINIFile, sSection, INI_VALUE_LEDTYPE, &sData) == ERROR_SUCCESS)
 	{
 		oMeter.nIconType	= LookupValue (g_aIconTypes, sData, oMeter.nIconType);
@@ -641,7 +692,12 @@ static DWORD SaveCounterSettings (const CString& sINIFile, const CString& sSecti
 static DWORD SaveMeterSettings (const CString& sINIFile, const MeterSettings& oMeter)
 {
 	CString	sSection	= GetMeterSection (oMeter.nId);
-	DWORD	nError		= WriteINIValue (sINIFile, sSection, INI_VALUE_LEDTYPE, CString (LookupName (g_aIconTypes, oMeter.nIconType)));
+	DWORD	nError		= WriteINIValue (sINIFile, sSection, INI_VALUE_NAME, oMeter.sName);
+
+	if (nError == ERROR_SUCCESS)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_LEDTYPE, CString (LookupName (g_aIconTypes, oMeter.nIconType)));
+	}
 
 	const TCHAR*	asColorKeys[3]	= { INI_VALUE_COLOR_LOW, INI_VALUE_COLOR_MID, INI_VALUE_COLOR_HIGH };
 	for (int i = 0; i < 3 && nError == ERROR_SUCCESS; i++)

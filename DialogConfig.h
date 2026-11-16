@@ -9,6 +9,10 @@
 #define PREVIEW_TIMER_ID		1
 #define PREVIEW_INTERVAL_MS		120
 
+// A change in the dialog is shown on the tray icons this long after the last change (so typing a number is not applied digit by digit)
+#define CHANGE_TIMER_ID			2
+#define CHANGE_DELAY_MS			250
+
 
 // CDialogConfig dialog
 
@@ -26,14 +30,21 @@ public:
 protected:
 	virtual	void	DoDataExchange(CDataExchange* pDX);		// DDX/DDV support
 	BOOL			PreTranslateMessage(MSG* pMsg);			// Tooltip support
+	virtual BOOL	OnCommand (WPARAM wParam, LPARAM lParam);
+	virtual void	OnOK ();
+	virtual void	OnCancel ();
 
 	DECLARE_MESSAGE_MAP()
 
 private:
 	// Control object variables
-	CComboBox	m_cCounterSel;			// The meters: the settings controls show the one selected
+	CListBox	m_cMeterList;			// The meters: the settings controls show the one selected
 	CButton		m_cAddMeter;
 	CButton		m_cRemoveMeter;
+	CEdit		m_cMeterName;
+	CButton		m_cSave;
+	CButton		m_cRevert;
+	CStatic		m_cStatus;
 	CComboBox	m_cIconType;
 	CComboBox	m_cValueFormat;
 	CComboBox	m_cScaleMode;
@@ -55,7 +66,6 @@ private:
 	CStatic		m_cLinkSpeedText;
 	CButton		m_cUseLinkSpeed;
 	CEdit		m_cCounterPath;
-	CButton		m_cUpdateINI;
 	CButton		m_cDefaultValues;
 	CComboBox	m_cSelectPerfObjects;
 	CComboBox	m_cSelectPerfCounters;
@@ -65,6 +75,7 @@ private:
 
 	// Control value variables
 	int			m_nCounterSel;			// Which meter the settings controls show (index into m_oSettings.aMeters)
+	CString		m_sMeterName;
 	int			m_nTab;					// The page shown: 0 data source, 1 scale, 2 appearance, 3 alerts
 	int			m_nLEDType;				// Icon type - 1
 	int			m_nValueFormat;			// Value format - 1
@@ -77,7 +88,6 @@ private:
 	int			m_nThresholdMid;
 	int			m_nThresholdHigh;
 	DWORD		m_nUpdateFrequency;
-	int			m_nUpdateINI;
 	double		m_d100Percent;			// The 100% value, in counter units
 	CString		m_s100Percent;			// ... as shown in the edit box, with a unit (e.g. "350 Mbit/s")
 	CString		m_s100PercentShown;		// The text last generated from m_d100Percent. If the edit box still has it, m_d100Percent is exact.
@@ -99,6 +109,13 @@ private:
 	// the settings of the other meters are kept here until they are selected.
 	DiskLEDSettings	m_oSettings;
 
+	// Changes are shown on the tray icons while editing (live preview) and only kept by Save
+	DiskLEDSettings	m_oSaved;				// What was saved last (or what was running when the dialog opened)
+	DiskLEDSettings	m_oApplied;				// What the tray icons show now
+	int				m_nAutoStartSaved;
+	BOOL			m_bLoading;				// The controls are being filled: their notifications are not changes
+	BOOL			m_bDirty;
+
 	// Preview
 	IconStyle		m_oPreviewStyle;
 	IconCounter		m_oPreview;
@@ -116,17 +133,22 @@ private:
 
 	// Functions
 	BOOL		OnInitDialog ();
-	BOOL		ApplySettings ();
+	BOOL		ReadControls (BOOL bReport);
+	void		ShowMeterInControls ();
+	void		NotifyChanged ();
+	BOOL		CommitChanges ();
+	void		UpdateDirtyState ();
+	BOOL		SaveNow ();
 	void		LoadGlobalToControls ();
 	void		SaveGlobalFromControls ();
 	void		LoadMeterToControls (int nMeter);
 	void		SaveControlsToMeter (int nMeter);
 	void		FillMeterList ();
+	CString		GetMeterListText (int nMeter);
 	void		UpdateMeterButtons ();
-	void		SwitchMeter (int nNew);
 	void		UpdateSwatches ();
 	void		UpdatePreview ();
-	BOOL		Read100Percent ();
+	BOOL		Read100Percent (BOOL bReport);
 	void		UpdateScaleLabel ();
 	void		UpdateLinkSpeedHint ();
 	void		UpdateLinkSpeedVisibility ();
@@ -140,17 +162,16 @@ private:
 	DWORD		GetCounterExplainText (CString sCounterPath, CString& sExplainText);
 
 public:
-	afx_msg void OnBnClickedOk();
+	afx_msg void OnBnClickedSave();
+	afx_msg void OnBnClickedRevert();
 	afx_msg void OnBnClickedDefaultvalues();
-	afx_msg void OnBnClickedCancel();
-	afx_msg void OnBnClickedApply();
 	afx_msg void OnColorButton(UINT nID);
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnSettingChange(UINT uFlags, LPCTSTR lpszSection);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
-	afx_msg void OnCbnSelchangeCounterSel();
+	afx_msg void OnLbnSelchangeMeterList();
 	afx_msg void OnBnClickedAddMeter();
 	afx_msg void OnBnClickedRemoveMeter();
 	afx_msg void OnTcnSelchangeTab(NMHDR* pNMHDR, LRESULT* pResult);

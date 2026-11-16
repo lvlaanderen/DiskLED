@@ -7,6 +7,7 @@
 #include "Helpers.h"
 #include "DialogAbout.h"
 #include "DialogConfig.h"
+#include "DialogMessage.h"
 #include <math.h>
 
 
@@ -109,7 +110,7 @@ DWORD CMainFrame::StartTimer ()
 
     if (! m_TimerID)
 	{
-		MessageBox (_T("Unable to set timer!"));
+		ShowMessage (this, TEXT ("Unable to set timer!"), PROGRAM_NAME, MB_OK | MB_ICONERROR);
 		return ERROR_INVALID_FUNCTION;
 	}
 
@@ -172,8 +173,8 @@ void CMainFrame::LogError (CString sCaller, CString sFailedComponent, DWORD nErr
 		sError	+= sHelpMessage;
 	}
 
-	// Display the message. The frame window is hidden and the config dialog may be open, so make sure the box is seen.
-	MessageBox (sError, PROGRAM_NAME, MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+	// Display the message. The frame window is hidden and the config dialog may be open, the message makes sure it is seen.
+	ShowMessage (this, sError, PROGRAM_NAME, MB_OK | MB_ICONERROR);
 }
 
 
@@ -772,23 +773,48 @@ void CMainFrame::GetSettings (DiskLEDSettings& oSettings)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Use new settings. If they do not work, the previous settings are restored.
+//	Use new settings, e.g. while the settings window previews changes. Problems with a counter are shown on its tray icon, not in a message.
+//	If the meters and their counters are the same, only their look, scale, alerts and names change: nothing is reconnected and the history is kept.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 DWORD CMainFrame::ApplySettings (const DiskLEDSettings& oSettings)
 {
-	DiskLEDSettings	oPrevious;
+	DiskLEDSettings	oNormalized	= oSettings;
+	BOOL			bSame		= TRUE;
 
-	GetSettings (oPrevious);
+	NormalizeSettings (oNormalized);
 
-	DWORD	nError	= Initialize (oSettings, FALSE);
-	if (nError != ERROR_SUCCESS)
+	if (oNormalized.aMeters.size () != m_aMeters.size ())
 	{
-		Initialize (oPrevious, TRUE);
+		bSame	= FALSE;
+	}
+	for (size_t i = 0; bSame && i < m_aMeters.size (); i++)
+	{
+		const MeterSettings&	oCurrent	= m_aMeters[i]->GetSettings ();
+		const MeterSettings&	oNew		= oNormalized.aMeters[i];
+
+		bSame	= (oCurrent.nId == oNew.nId && oCurrent.oCounter.sPath.CompareNoCase (oNew.oCounter.sPath) == 0);
 	}
 
-	return nError;
+	if (!bSame)
+	{
+		return Initialize (oNormalized, TRUE);
+	}
+
+	BOOL	bNewInterval	= (m_nUpdateInterval != oNormalized.nUpdateInterval);
+
+	m_nUpdateInterval	= oNormalized.nUpdateInterval;
+	for (size_t i = 0; i < m_aMeters.size (); i++)
+	{
+		m_aMeters[i]->UpdateSettings (oNormalized.aMeters[i]);
+	}
+	if (bNewInterval)
+	{
+		return StartTimer ();
+	}
+
+	return ERROR_SUCCESS;
 }
 
 

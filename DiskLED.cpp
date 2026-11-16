@@ -6,6 +6,7 @@
 #include "DiskLED.h"
 #include "MainFrm.h"
 #include "DarkMode.h"
+#include "DialogMessage.h"
 #include "Helpers.h"
 
 #ifdef _DEBUG
@@ -105,7 +106,7 @@ BOOL CDiskLEDApp::InitInstance()
 	m_hIcon = LoadIcon(IDI_ICON1);
 	if (m_hIcon == NULL)
 	{
-		AfxMessageBox(_T("Could not load icon. Exiting!"));
+		ShowMessage (NULL, TEXT ("Could not load icon. Exiting!"), TEXT ("DiskLED"), MB_OK | MB_ICONERROR);
 		return FALSE;
 	}
 

@@ -4,7 +4,6 @@
 //
 #define IDC_DEFAULTVALUES               3
 #define IDCANCEL2                       4
-#define IDC_APPLY                       4
 #define IDC_USE_SELECTED_DATA_SOURCE    5
 #define ID_TIMER                        101
 #define IDR_HTML_DIALOGABOUT            103
@@ -25,7 +24,6 @@
 #define IDS_TOOLTIP_ICONTYPE            145
 #define IDI_ICON11                      146
 #define IDS_TOOLTIP_UPDATE_FREQUENCY    147
-#define IDS_TOOLTIP_UPDATE_INI          148
 #define IDS_TOOLTIP_DEFAULT_VALUES      149
 #define IDS_TOOLTIP_100PERCENT          150
 #define IDS_TOOLTIP_COUNTERPATH         151
@@ -45,6 +43,10 @@
 #define IDS_TOOLTIP_REMOVE_METER        168
 #define IDS_TOOLTIP_USE_LINKSPEED       169
 #define IDS_TOOLTIP_QUICKPICK           170
+#define IDD_DIALOG_MESSAGE              171
+#define IDS_TOOLTIP_SAVE                172
+#define IDS_TOOLTIP_REVERT              173
+#define IDS_TOOLTIP_METERNAME           174
 #define IDC_ABOUT_ICON1                 1000
 #define IDC_SYSLINK_URL1                1001
 #define IDC_SYSLINK_URL2                1002
@@ -60,8 +62,6 @@
 #define IDC_100PERCENT_TEXT             1013
 #define IDC_100PERCENT_EDIT             1014
 #define IDC_UPDATEFREQUENCY_TEXT2       1015
-#define IDC_CHECK1                      1016
-#define IDC_UPDATE_INI                  1016
 #define IDC_COUNTERPATH_TEXT            1017
 #define IDC_COUNTERPATH_EDIT            1018
 #define IDC_COUNTERPATH_TEXT2           1019
@@ -84,7 +84,6 @@
 #define IDC_EDIT_THRESHOLD_MID          1041
 #define IDC_EDIT_THRESHOLD_HIGH         1042
 #define IDC_CHECK_AUTOSTART             1043
-#define IDC_COMBO_COUNTERSEL            1044
 #define IDC_ADD_METER                   1045
 #define IDC_COMBO_SCALEMODE             1046
 #define IDC_EDIT_ALERT_PERCENT          1047
@@ -109,6 +108,18 @@
 #define IDC_QUICKPICK_TEXT              1066
 #define IDC_COMBO_QUICKPICK             1067
 #define IDC_REMOVE_METER                1068
+#define IDC_LIST_METERS                 1069
+#define IDC_EDIT_METERNAME              1070
+#define IDC_SAVE                        1071
+#define IDC_REVERT                      1072
+#define IDC_STATUS_TEXT                 1073
+#define IDC_LABEL_METERS                1074
+#define IDC_LABEL_METERNAME             1075
+#define IDC_MSG_ICON                    1076
+#define IDC_MSG_TEXT                    1077
+#define IDC_MSG_BTN1                    1078
+#define IDC_MSG_BTN2                    1079
+#define IDC_MSG_BTN3                    1080
 #define ID_POPUP_ID                     32773
 #define ID_EXIT                         32775
 #define ID_POPUP_EXIT                   32776
@@ -121,9 +132,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        171
+#define _APS_NEXT_RESOURCE_VALUE        175
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1069
+#define _APS_NEXT_CONTROL_VALUE         1081
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

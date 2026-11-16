@@ -53,6 +53,9 @@ public:
 	// New settings: the history starts again. A learned maximum is kept if the counter is the same.
 	void	SetSettings (const MeterSettings& oSettings, DWORD nUpdateInterval);
 
+	// New settings for the same counter (the look, scale, alerts, name): the history and what was learned are kept
+	void	UpdateSettings (const MeterSettings& oSettings);
+
 	// The counter in the shared query. Connect returns a PDH error, with the reason in sError.
 	DWORD	Connect (PDH_HQUERY hQuery, CString& sError);
 	void	Disconnect ();
@@ -93,6 +96,9 @@ private:
 	BOOL			m_bErrorShown;		// The error was already reported with a balloon
 
 	void	ResetState ();
+	void	UpdateCeiling ();
+	CString	GetName () const;
+	CString	GetTooltipPrefix () const;
 	CString	GetCounterLabel () const;
 	CString	GetTooltip () const;
 	void	SetTrayIcon (HICON hNew);

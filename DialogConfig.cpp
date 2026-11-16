@@ -5,6 +5,7 @@
 #include "DiskLED.h"
 #include "MainFrm.h"
 #include "DialogConfig.h"
+#include "DialogMessage.h"
 #include "Helpers.h"
 #include <math.h>
 
@@ -19,7 +20,6 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_nValueFormat(0), m_nScaleMode(0), m_nInvert(0), m_nAutoStart(0)
 														, m_nAlertPercent(0), m_nAlertSeconds(0)
 														, m_nThresholdMid(0), m_nThresholdHigh(0)
-														, m_nUpdateINI(0)
 														, m_d100Percent(0)
 														, m_nTab(0)
 														, m_dLinkSpeed(0)
@@ -29,6 +29,9 @@ CDialogConfig::CDialogConfig(CMainFrame* pMainFrame) : CDialog(CDialogConfig::ID
 														, m_sPerfInstance(_T(""))
 														, m_sPerfDescription(_T(""))
 														, m_dPreviewTime(0)
+														, m_bLoading(TRUE)
+														, m_bDirty(FALSE)
+														, m_nAutoStartSaved(0)
 {
 	if (pMainFrame)
 	{
@@ -78,8 +81,12 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 
-	DDX_Control(pDX, IDC_COMBO_COUNTERSEL, m_cCounterSel);
-	DDX_CBIndex(pDX, IDC_COMBO_COUNTERSEL, m_nCounterSel);
+	DDX_Control(pDX, IDC_LIST_METERS, m_cMeterList);
+	DDX_Control(pDX, IDC_EDIT_METERNAME, m_cMeterName);
+	DDX_Text(pDX, IDC_EDIT_METERNAME, m_sMeterName);
+	DDX_Control(pDX, IDC_SAVE, m_cSave);
+	DDX_Control(pDX, IDC_REVERT, m_cRevert);
+	DDX_Control(pDX, IDC_STATUS_TEXT, m_cStatus);
 	DDX_Control(pDX, IDC_ADD_METER, m_cAddMeter);
 	DDX_Control(pDX, IDC_REMOVE_METER, m_cRemoveMeter);
 	DDX_Control(pDX, IDC_COMBO_ICONTYPE, m_cIconType);
@@ -91,9 +98,7 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_CHECK_INVERT, m_cInvert);
 	DDX_Check(pDX, IDC_CHECK_INVERT, m_nInvert);
 	DDX_Control(pDX, IDC_EDIT_ALERT_PERCENT, m_cAlertPercent);
-	DDX_Text(pDX, IDC_EDIT_ALERT_PERCENT, m_nAlertPercent);
 	DDX_Control(pDX, IDC_EDIT_ALERT_SECONDS, m_cAlertSeconds);
-	DDX_Text(pDX, IDC_EDIT_ALERT_SECONDS, m_nAlertSeconds);
 	DDX_Control(pDX, IDC_CHECK_AUTOSTART, m_cAutoStart);
 	DDX_Check(pDX, IDC_CHECK_AUTOSTART, m_nAutoStart);
 	DDX_Control(pDX, IDC_COLOR_LOW, m_cColor[0]);
@@ -101,13 +106,20 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_COLOR_HIGH, m_cColor[2]);
 	DDX_Control(pDX, IDC_EDIT_THRESHOLD_MID, m_cThresholdMid);
 	DDX_Control(pDX, IDC_EDIT_THRESHOLD_HIGH, m_cThresholdHigh);
-	DDX_Text(pDX, IDC_EDIT_THRESHOLD_MID, m_nThresholdMid);
-	DDX_Text(pDX, IDC_EDIT_THRESHOLD_HIGH, m_nThresholdHigh);
+
+	// The numbers are only shown here. They are read by ReadControls, so a half typed number is no error message.
+	if (!pDX->m_bSaveAndValidate)
+	{
+		DDX_Text(pDX, IDC_EDIT_ALERT_PERCENT, m_nAlertPercent);
+		DDX_Text(pDX, IDC_EDIT_ALERT_SECONDS, m_nAlertSeconds);
+		DDX_Text(pDX, IDC_EDIT_THRESHOLD_MID, m_nThresholdMid);
+		DDX_Text(pDX, IDC_EDIT_THRESHOLD_HIGH, m_nThresholdHigh);
+		DDX_Text(pDX, IDC_UPDATEFREQUENCY_EDIT, m_nUpdateFrequency);
+	}
 	DDX_Control(pDX, IDC_PREVIEW, m_cPreview);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_TEXT1, m_cUpdateFrequencyText1);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_TEXT2, m_cUpdateFrequencyText2);
 	DDX_Control(pDX, IDC_UPDATEFREQUENCY_EDIT, m_cUpdateFrequencyEdit);
-	DDX_Control(pDX, IDC_UPDATE_INI, m_cUpdateINI);
 	DDX_Control(pDX, IDC_DEFAULTVALUES, m_cDefaultValues);
 	DDX_Control(pDX, IDC_100PERCENT_EDIT, m_c100Percent);
 	DDX_Control(pDX, IDC_TAB_MAIN, m_cTab);
@@ -116,9 +128,7 @@ void CDialogConfig::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_USE_LINKSPEED, m_cUseLinkSpeed);
 	DDX_Control(pDX, IDC_COUNTERPATH_EDIT, m_cCounterPath);
 
-	DDX_Text(pDX, IDC_UPDATEFREQUENCY_EDIT, m_nUpdateFrequency);
 	DDX_Text(pDX, IDC_100PERCENT_EDIT, m_s100Percent);
-	DDX_Check (pDX, IDC_UPDATE_INI, m_nUpdateINI);
 	DDX_Text(pDX, IDC_COUNTERPATH_EDIT, m_sCounterPath);
 	DDX_Control(pDX, IDC_PERF_OBJECTS, m_cSelectPerfObjects);
 	DDX_CBString(pDX, IDC_PERF_OBJECTS, m_sPerfObject);
@@ -144,10 +154,11 @@ BOOL CDialogConfig::PreTranslateMessage(MSG* pMsg)
 
 
 BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
-	ON_BN_CLICKED(IDOK, &CDialogConfig::OnBnClickedOk)
+	ON_COMMAND(IDOK, &CDialogConfig::OnOK)
+	ON_COMMAND(IDCANCEL, &CDialogConfig::OnCancel)
+	ON_BN_CLICKED(IDC_SAVE, &CDialogConfig::OnBnClickedSave)
+	ON_BN_CLICKED(IDC_REVERT, &CDialogConfig::OnBnClickedRevert)
 	ON_BN_CLICKED(IDC_DEFAULTVALUES, &CDialogConfig::OnBnClickedDefaultvalues)
-	ON_BN_CLICKED(IDCANCEL, &CDialogConfig::OnBnClickedCancel)
-	ON_BN_CLICKED(IDC_APPLY, &CDialogConfig::OnBnClickedApply)
 	ON_BN_CLICKED(IDC_USE_SELECTED_DATA_SOURCE, &CDialogConfig::OnBnClickedUseSelectedDataSource)
 	ON_BN_CLICKED(IDC_USE_LINKSPEED, &CDialogConfig::OnBnClickedUseLinkSpeed)
 	ON_CBN_SELCHANGE(IDC_COMBO_QUICKPICK, &CDialogConfig::OnCbnSelchangeQuickPick)
@@ -158,7 +169,7 @@ BEGIN_MESSAGE_MAP(CDialogConfig, CDialog)
 	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CDialogConfig::OnTcnSelchangeTab)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
-	ON_CBN_SELCHANGE(IDC_COMBO_COUNTERSEL, &CDialogConfig::OnCbnSelchangeCounterSel)
+	ON_LBN_SELCHANGE(IDC_LIST_METERS, &CDialogConfig::OnLbnSelchangeMeterList)
 	ON_BN_CLICKED(IDC_ADD_METER, &CDialogConfig::OnBnClickedAddMeter)
 	ON_BN_CLICKED(IDC_REMOVE_METER, &CDialogConfig::OnBnClickedRemoveMeter)
 	ON_CBN_SELCHANGE(IDC_COMBO_VALUEFORMAT, &CDialogConfig::OnCbnSelchangeValueFormat)
@@ -258,6 +269,7 @@ void CDialogConfig::LoadMeterToControls (int nMeter)
 	const MeterSettings&	oMeter		= m_oSettings.aMeters[nMeter];
 	const CounterSettings&	oCounter	= oMeter.oCounter;
 
+	m_sMeterName		= oMeter.sName;
 	m_nLEDType			= oMeter.nIconType - 1;
 	m_nThresholdMid		= oMeter.nThresholdMid;
 	m_nThresholdHigh	= oMeter.nThresholdHigh;
@@ -282,6 +294,7 @@ void CDialogConfig::SaveControlsToMeter (int nMeter)
 	MeterSettings&		oMeter		= m_oSettings.aMeters[nMeter];
 	CounterSettings&	oCounter	= oMeter.oCounter;
 
+	oMeter.sName			= m_sMeterName;
 	oMeter.nIconType		= m_nLEDType + 1;
 	oMeter.nThresholdMid	= m_nThresholdMid;
 	oMeter.nThresholdHigh	= m_nThresholdHigh;
@@ -314,9 +327,11 @@ void CDialogConfig::UpdateSwatches ()
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-BOOL CDialogConfig::Read100Percent ()
+BOOL CDialogConfig::Read100Percent (BOOL bReport)
 {
 	double	dValue	= 0;
+
+	m_c100Percent.GetWindowText (m_s100Percent);
 
 	// Not edited: the exact value is still in m_d100Percent
 	if (m_s100Percent == m_s100PercentShown)
@@ -326,8 +341,13 @@ BOOL CDialogConfig::Read100Percent ()
 
 	if (!ParseScaleValue (m_nValueFormat + 1, m_s100Percent, dValue) || !(dValue > 0.0) || dValue > MAX_100PERCENT)
 	{
-		MessageBox (TEXT ("The 100% value is not valid. Enter a number greater than 0, optionally with a unit such as Mbit/s or MB/s."), TEXT ("DiskLED: 100% value"), MB_OK | MB_ICONEXCLAMATION);
-		m_c100Percent.SetFocus ();
+		if (bReport)
+		{
+			m_cTab.SetCurSel (1);
+			ShowPage (1);
+			ShowMessage (this, TEXT ("The 100% value is not valid. Enter a number greater than 0, optionally with a unit such as Mbit/s or MB/s."), TEXT ("DiskLED: 100% value"), MB_OK | MB_ICONEXCLAMATION);
+			m_c100Percent.SetFocus ();
+		}
 		return FALSE;
 	}
 
@@ -521,7 +541,7 @@ void CDialogConfig::OnCbnSelchangeQuickPick ()
 	sLocalPath	= sPath.IsEmpty () ? sPath : EnglishPathToLocal (sPath);
 	if (sLocalPath.IsEmpty () || PdhValidatePath (sLocalPath) != ERROR_SUCCESS)
 	{
-		MessageBox (TEXT ("DiskLED could not find this data source on this computer. Please choose it with the lists below."), TEXT ("DiskLED: Quick pick"), MB_OK | MB_ICONEXCLAMATION);
+		ShowMessage (this, TEXT ("DiskLED could not find this data source on this computer. Please choose it with the lists below."), TEXT ("DiskLED: Quick pick"), MB_OK | MB_ICONEXCLAMATION);
 		return;
 	}
 
@@ -536,6 +556,7 @@ void CDialogConfig::OnCbnSelchangeQuickPick ()
 	RefreshScaleControls ();
 	SelectPathInBrowser ();
 	UpdatePreview ();
+	NotifyChanged ();
 }
 
 
@@ -557,7 +578,10 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Set up tooltip support
 	if (m_oToolTip.Create (this))
 	{
-		m_oToolTip.AddTool (&m_cCounterSel, IDS_TOOLTIP_COUNTERSEL);
+		m_oToolTip.AddTool (&m_cMeterList, IDS_TOOLTIP_COUNTERSEL);
+		m_oToolTip.AddTool (&m_cMeterName, IDS_TOOLTIP_METERNAME);
+		m_oToolTip.AddTool (&m_cSave, IDS_TOOLTIP_SAVE);
+		m_oToolTip.AddTool (&m_cRevert, IDS_TOOLTIP_REVERT);
 		m_oToolTip.AddTool (&m_cAddMeter, IDS_TOOLTIP_ADD_METER);
 		m_oToolTip.AddTool (&m_cRemoveMeter, IDS_TOOLTIP_REMOVE_METER);
 		m_oToolTip.AddTool (&m_cIconType, IDS_TOOLTIP_ICONTYPE);
@@ -574,7 +598,6 @@ BOOL CDialogConfig::OnInitDialog ()
 		m_oToolTip.AddTool (&m_cThresholdMid, IDS_TOOLTIP_THRESHOLDS);
 		m_oToolTip.AddTool (&m_cThresholdHigh, IDS_TOOLTIP_THRESHOLDS);
 		m_oToolTip.AddTool (&m_cUpdateFrequencyEdit, IDS_TOOLTIP_UPDATE_FREQUENCY);
-		m_oToolTip.AddTool (&m_cUpdateINI, IDS_TOOLTIP_UPDATE_INI);
 		m_oToolTip.AddTool (&m_cDefaultValues, IDS_TOOLTIP_DEFAULT_VALUES);
 		m_oToolTip.AddTool (&m_c100Percent, IDS_TOOLTIP_100PERCENT);
 		m_oToolTip.AddTool (&m_cUseLinkSpeed, IDS_TOOLTIP_USE_LINKSPEED);
@@ -622,22 +645,26 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cQuickPick.AddString (TEXT ("Memory in use"));
 	m_cQuickPick.SetCurSel (0);
 
-	// Control value initialization
+	// Control value initialization. What is running is what was saved (or what the defaults are, if nothing was saved yet).
 	if (m_pMainFrame)
 	{
 		m_pMainFrame->GetSettings (m_oSettings);
 	}
-	m_nCounterSel	= 0;
-	m_nAutoStart	= IsAutoStartEnabled () ? 1 : 0;
+	m_nCounterSel		= 0;
+	m_nAutoStart		= IsAutoStartEnabled () ? 1 : 0;
+	m_nAutoStartSaved	= m_nAutoStart;
+	m_oSaved			= m_oSettings;
+	m_oApplied			= m_oSettings;
+	m_cMeterName.SetLimitText (MAX_METER_NAME);
 
-	// The settings live in %AppData% (or next to the program in portable mode), so they can be stored without problems
-	m_nUpdateINI	= 1;
+	m_bLoading	= TRUE;
 	LoadGlobalToControls ();
 	LoadMeterToControls (m_nCounterSel);
 	FillMeterList ();
 
 	// Update the dialog with the data written to the member variables
 	UpdateData (FALSE);
+	m_bLoading	= FALSE;
 	RefreshScaleControls ();
 
 	// The pages
@@ -648,8 +675,24 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cTab.SetCurSel (0);
 	ShowPage (0);
 
-	// Set the initial focus to the icon type
-	m_cIconType.SetFocus ();
+	// Set the initial focus to the name of the meter
+	m_cMeterName.SetFocus ();
+
+	// The hidden main window is not a place to center on (it may be on another monitor): use the monitor with the mouse pointer, which is where the user clicked the tray icon
+	{
+		POINT		oCursor;
+		MONITORINFO	oMonitor;
+		CRect		oWindow;
+
+		GetCursorPos (&oCursor);
+		oMonitor.cbSize	= sizeof (oMonitor);
+		if (GetMonitorInfo (MonitorFromPoint (oCursor, MONITOR_DEFAULTTOPRIMARY), &oMonitor))
+		{
+			GetWindowRect (oWindow);
+			SetWindowPos (NULL, oMonitor.rcWork.left + (oMonitor.rcWork.right - oMonitor.rcWork.left - oWindow.Width ()) / 2,
+				oMonitor.rcWork.top + (oMonitor.rcWork.bottom - oMonitor.rcWork.top - oWindow.Height ()) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+		}
+	}
 
 	// Initialize the performance browser controls
 	InitPerfBrowser ();
@@ -657,15 +700,17 @@ BOOL CDialogConfig::OnInitDialog ()
 	// Start the preview
 	SetTimer (PREVIEW_TIMER_ID, PREVIEW_INTERVAL_MS, NULL);
 	UpdatePreview ();
+	UpdateDirtyState ();
 
-	// Success
-	return 0;
+	// The focus was set by hand
+	return FALSE;
 }
 
 
 void CDialogConfig::OnDestroy ()
 {
 	KillTimer (PREVIEW_TIMER_ID);
+	KillTimer (CHANGE_TIMER_ID);
 
 	CDialog::OnDestroy ();
 }
@@ -700,16 +745,281 @@ void CDialogConfig::OnSettingChange (UINT uFlags, LPCTSTR lpszSection)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The OK button was clicked
+//	Reading the controls. An entry that is not valid (e.g. a number that is still being typed) is reported only when asked to (bReport),
+//	otherwise the controls are not used and the tray icons keep what they show.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDialogConfig::OnBnClickedOk()
+BOOL CDialogConfig::ReadControls (BOOL bReport)
 {
-	if (ApplySettings ())
+	// Combo boxes, check boxes and texts. The numbers are not part of this exchange, see DoDataExchange.
+	if (!UpdateData (TRUE))
 	{
-		OnOK();
+		return FALSE;
 	}
+
+	struct NumberField
+	{
+		UINT			nID;
+		int				nPage;
+		const TCHAR*	sName;
+	};
+	static const NumberField aFields[] =
+	{
+		{ IDC_EDIT_THRESHOLD_MID,		2,	TEXT ("the mid colour threshold") },
+		{ IDC_EDIT_THRESHOLD_HIGH,		2,	TEXT ("the high colour threshold") },
+		{ IDC_UPDATEFREQUENCY_EDIT,		2,	TEXT ("the update frequency") },
+		{ IDC_EDIT_ALERT_PERCENT,		3,	TEXT ("the warning percentage") },
+		{ IDC_EDIT_ALERT_SECONDS,		3,	TEXT ("the warning time") }
+	};
+	UINT	anValues[_countof (aFields)];
+
+	for (int i = 0; i < _countof (aFields); i++)
+	{
+		BOOL	bTranslated	= FALSE;
+
+		anValues[i]	= GetDlgItemInt (aFields[i].nID, &bTranslated, FALSE);
+		if (!bTranslated)
+		{
+			if (bReport)
+			{
+				m_cTab.SetCurSel (aFields[i].nPage);
+				ShowPage (aFields[i].nPage);
+				ShowMessage (this, CString (TEXT ("Please enter a whole number for ")) + aFields[i].sName + TEXT ("."), TEXT ("DiskLED: Settings"), MB_OK | MB_ICONEXCLAMATION);
+				GetDlgItem (aFields[i].nID)->SetFocus ();
+			}
+			return FALSE;
+		}
+	}
+	m_nThresholdMid		= (int) anValues[0];
+	m_nThresholdHigh	= (int) anValues[1];
+	m_nUpdateFrequency	= anValues[2];
+	m_nAlertPercent		= (int) anValues[3];
+	m_nAlertSeconds		= (int) anValues[4];
+
+	return Read100Percent (bReport);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Show the settings in the controls: the meter that is selected and the settings for all meters. This is not a change by the user.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::ShowMeterInControls ()
+{
+	m_bLoading	= TRUE;
+
+	LoadGlobalToControls ();
+	LoadMeterToControls (m_nCounterSel);
+	FillMeterList ();
+	UpdateData (FALSE);
+	RefreshScaleControls ();
+	UpdateSwatches ();
+	SelectPathInBrowser ();
+	UpdatePreview ();
+	UpdateDirtyState ();
+
+	m_bLoading	= FALSE;
+	KillTimer (CHANGE_TIMER_ID);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Live preview: a change in the controls is shown on the tray icons a moment after the last change. Nothing is stored until Save.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::NotifyChanged ()
+{
+	if (!m_bLoading && m_hWnd)
+	{
+		SetTimer (CHANGE_TIMER_ID, CHANGE_DELAY_MS, NULL);
+	}
+}
+
+BOOL CDialogConfig::CommitChanges ()
+{
+	KillTimer (CHANGE_TIMER_ID);
+
+	// An entry that is not complete yet: wait for the next change
+	if (!ReadControls (FALSE))
+	{
+		return FALSE;
+	}
+
+	SaveControlsToMeter (m_nCounterSel);
+	SaveGlobalFromControls ();
+
+	if (m_pMainFrame && !AreSettingsEqual (m_oSettings, m_oApplied))
+	{
+		m_pMainFrame->ApplySettings (m_oSettings);
+		m_oApplied	= m_oSettings;
+	}
+
+	// The list shows the name or the counter of the meter
+	CString	sText	= GetMeterListText (m_nCounterSel);
+	CString	sShown;
+
+	m_cMeterList.GetText (m_nCounterSel, sShown);
+	if (sText != sShown)
+	{
+		m_cMeterList.DeleteString (m_nCounterSel);
+		m_cMeterList.InsertString (m_nCounterSel, sText);
+		m_cMeterList.SetCurSel (m_nCounterSel);
+	}
+
+	UpdateDirtyState ();
+
+	return TRUE;
+}
+
+// Are there changes that were not saved? Save and Revert only make sense then.
+void CDialogConfig::UpdateDirtyState ()
+{
+	BOOL	bDirty	= !AreSettingsEqual (m_oSettings, m_oSaved) || m_nAutoStart != m_nAutoStartSaved;
+
+	m_bDirty	= bDirty;
+
+	// A disabled button must not keep the keyboard focus
+	HWND	hFocus	= ::GetFocus ();
+	if (!bDirty && hFocus != NULL && (hFocus == m_cSave.m_hWnd || hFocus == m_cRevert.m_hWnd))
+	{
+		m_cMeterList.SetFocus ();
+	}
+
+	m_cSave.EnableWindow (bDirty);
+	m_cRevert.EnableWindow (bDirty);
+	m_cStatus.SetWindowText (bDirty ? TEXT ("Unsaved changes, shown live on the tray icons. Save to keep them.") : TEXT (""));
+	SetWindowText (bDirty ? TEXT ("DiskLED Configuration *") : TEXT ("DiskLED Configuration"));
+}
+
+// Any change in the controls that belongs to a meter or to the settings is a change to preview. The buttons that manage the meters and the settings do their own work.
+BOOL CDialogConfig::OnCommand (WPARAM wParam, LPARAM lParam)
+{
+	UINT	nID		= LOWORD (wParam);
+	UINT	nCode	= HIWORD (wParam);
+
+	if (lParam != 0 && (nCode == EN_CHANGE || nCode == CBN_SELCHANGE || nCode == BN_CLICKED))
+	{
+		switch (nID)
+		{
+		case IDOK:
+		case IDCANCEL:
+		case IDC_SAVE:
+		case IDC_REVERT:
+		case IDC_ADD_METER:
+		case IDC_REMOVE_METER:
+		case IDC_LIST_METERS:
+		case IDC_DEFAULTVALUES:
+			break;
+		default:
+			NotifyChanged ();
+		}
+	}
+
+	return CDialog::OnCommand (wParam, lParam);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Save: keep what the tray icons show. Returns FALSE if there is an invalid entry or the file cannot be written.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+BOOL CDialogConfig::SaveNow ()
+{
+	if (!ReadControls (TRUE))
+	{
+		return FALSE;
+	}
+
+	SaveControlsToMeter (m_nCounterSel);
+	SaveGlobalFromControls ();
+	KillTimer (CHANGE_TIMER_ID);
+
+	if (m_pMainFrame)
+	{
+		// The running settings are the corrected ones, and include what the auto scale has learned meanwhile
+		m_pMainFrame->ApplySettings (m_oSettings);
+		m_pMainFrame->GetSettings (m_oSettings);
+		if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
+		{
+			m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
+		}
+		m_oApplied	= m_oSettings;
+	}
+
+	// Autostart is stored in the registry, not in the INI file
+	DWORD	nAutoStartError	= SetAutoStart (m_nAutoStart != 0);
+	if (nAutoStartError != ERROR_SUCCESS && m_pMainFrame)
+	{
+		m_pMainFrame->LogError (TEXT ("Save"), TEXT ("SetAutoStart"), nAutoStartError);
+	}
+
+	if (m_pMainFrame)
+	{
+		CString	sINIFile;
+		m_pMainFrame->GetINIFile (sINIFile);
+
+		DWORD	nError	= SaveSettings (sINIFile, m_oSettings);
+		if (nError != ERROR_SUCCESS)
+		{
+			CString	sExplanation	= (nError == ERROR_ACCESS_DENIED) ? TEXT ("Access denied - could not write to the INI file: <") : TEXT ("Could not write to the INI file: <");
+
+			m_pMainFrame->LogError (TEXT ("Save"), TEXT ("WriteINIValue"), nError, sExplanation + sINIFile + TEXT (">"));
+			ShowMeterInControls ();
+			return FALSE;
+		}
+	}
+
+	m_oSaved			= m_oSettings;
+	m_nAutoStartSaved	= m_nAutoStart;
+	ShowMeterInControls ();
+
+	return TRUE;
+}
+
+void CDialogConfig::OnBnClickedSave ()
+{
+	SaveNow ();
+}
+
+void CDialogConfig::OnOK ()
+{
+	// The Enter key
+	if (m_bDirty)
+	{
+		SaveNow ();
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Revert: back to what was saved last
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void CDialogConfig::OnBnClickedRevert ()
+{
+	m_oSettings		= m_oSaved;
+	m_nAutoStart	= m_nAutoStartSaved;
+	if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
+	{
+		m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
+	}
+
+	if (m_pMainFrame)
+	{
+		m_pMainFrame->ApplySettings (m_oSettings);
+	}
+	m_oApplied	= m_oSettings;
+
+	ShowMeterInControls ();
 }
 
 
@@ -724,63 +1034,97 @@ void CDialogConfig::OnBnClickedDefaultvalues()
 	// Default settings for everything except the autostart, which is not part of the settings. A single meter is left.
 	SetDefaultSettings (m_oSettings);
 	m_nCounterSel	= 0;
-	LoadGlobalToControls ();
-	LoadMeterToControls (m_nCounterSel);
-	FillMeterList ();
-
-	// Update the dialog with the new data
-	UpdateData (FALSE);
-	RefreshScaleControls ();
-	UpdateSwatches ();
-	SelectPathInBrowser ();
-	UpdatePreview ();
+	ShowMeterInControls ();
+	CommitChanges ();
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The cancel button was clicked
+//	Close (also the Escape key and the close button of the window): unsaved changes can be saved or discarded
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDialogConfig::OnBnClickedCancel()
+void CDialogConfig::OnCancel ()
 {
-	OnCancel();
+	// Entries that were just made count
+	CommitChanges ();
+
+	if (m_bDirty)
+	{
+		int	nChoice	= ShowChoice (this, TEXT ("You have unsaved changes. They are shown on the tray icons now."), TEXT ("DiskLED"), IDI_WARNING,
+			TEXT ("Save"), TEXT ("Discard"), TEXT ("Cancel"), 3);
+
+		if (nChoice == 1)
+		{
+			if (!SaveNow ())
+			{
+				return;
+			}
+		}
+		else if (nChoice == 2)
+		{
+			// The tray icons go back to what was saved
+			if (m_pMainFrame)
+			{
+				m_pMainFrame->ApplySettings (m_oSaved);
+			}
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	CDialog::OnCancel ();
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	The list of meters: "<number>: <counter name> (<instance>)"
+//	The list of meters: "<number>: <name>", or "<number>: <counter name> (<instance>)" for a meter without a name
 //
 ////////////////////////////////////////////////////////////////////////////////
+
+CString CDialogConfig::GetMeterListText (int nMeter)
+{
+	const MeterSettings&	oMeter	= m_oSettings.aMeters[nMeter];
+	CString					sText;
+
+	if (!oMeter.sName.IsEmpty ())
+	{
+		sText.Format (TEXT ("%d: %s"), oMeter.nId, (LPCTSTR) oMeter.sName);
+		return sText;
+	}
+
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	if (!ParsePerfPath (oMeter.oCounter.sPath, sMachine, sObject, sInstance, sCounter))
+	{
+		sCounter	= oMeter.oCounter.sPath;
+	}
+	sText.Format (TEXT ("%d: %s"), oMeter.nId, (LPCTSTR) sCounter);
+	if (!sInstance.IsEmpty ())
+	{
+		sText	+= TEXT (" (") + sInstance + TEXT (")");
+	}
+
+	return sText;
+}
 
 void CDialogConfig::FillMeterList ()
 {
-	m_cCounterSel.ResetContent ();
+	m_cMeterList.ResetContent ();
 
 	for (size_t i = 0; i < m_oSettings.aMeters.size (); i++)
 	{
-		CString	sMachine;
-		CString	sObject;
-		CString	sInstance;
-		CString	sCounter;
-		CString	sText;
-		CString	sPath	= (int) i == m_nCounterSel ? (m_sCounterPath.IsEmpty () ? m_sCounterPath : LocalPathToEnglish (m_sCounterPath)) : m_oSettings.aMeters[i].oCounter.sPath;
-
-		if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
-		{
-			sCounter	= sPath;
-		}
-		sText.Format (TEXT ("%d: %s"), m_oSettings.aMeters[i].nId, (LPCTSTR) sCounter);
-		if (!sInstance.IsEmpty ())
-		{
-			sText	+= TEXT (" (") + sInstance + TEXT (")");
-		}
-		m_cCounterSel.AddString (sText);
+		m_cMeterList.AddString (GetMeterListText ((int) i));
 	}
 
-	m_cCounterSel.SetCurSel (m_nCounterSel);
+	m_cMeterList.SetCurSel (m_nCounterSel);
 	UpdateMeterButtons ();
 }
 
@@ -793,53 +1137,31 @@ void CDialogConfig::UpdateMeterButtons ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Show another meter: keep the settings of the previous one, show the settings of the new one
-//	Returns without changing anything if the previous meter's entries are not valid
+//	Another meter was selected: keep the settings of the previous one, show the settings of the new one
+//	Stays with the previous meter if its entries are not valid
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDialogConfig::SwitchMeter (int nNew)
+void CDialogConfig::OnLbnSelchangeMeterList ()
 {
-	int	nPrevious	= m_nCounterSel;
-
-	// Get data from the dialog box into our member variables. The index in m_nCounterSel is that of the new meter, if the user picked one.
-	if (!UpdateData (TRUE))
-	{
-		m_nCounterSel	= nPrevious;
-		m_cCounterSel.SetCurSel (nPrevious);
-		return;
-	}
-
-	// The 100% value of the previous meter must be valid before leaving it
-	m_nCounterSel	= nPrevious;
-	if (!Read100Percent ())
-	{
-		m_cCounterSel.SetCurSel (nPrevious);
-		return;
-	}
-
-	SaveControlsToMeter (nPrevious);
-	m_nCounterSel	= nNew;
-
-	LoadMeterToControls (nNew);
-	FillMeterList ();
-	UpdateData (FALSE);
-	RefreshScaleControls ();
-	UpdateSwatches ();
-	SelectPathInBrowser ();
-	UpdatePreview ();
-}
-
-void CDialogConfig::OnCbnSelchangeCounterSel ()
-{
-	int	nNew	= m_cCounterSel.GetCurSel ();
+	int	nNew	= m_cMeterList.GetCurSel ();
 
 	if (nNew < 0 || nNew >= (int) m_oSettings.aMeters.size () || nNew == m_nCounterSel)
 	{
 		return;
 	}
 
-	SwitchMeter (nNew);
+	if (!ReadControls (TRUE))
+	{
+		m_cMeterList.SetCurSel (m_nCounterSel);
+		return;
+	}
+
+	SaveControlsToMeter (m_nCounterSel);
+	SaveGlobalFromControls ();
+	m_nCounterSel	= nNew;
+	ShowMeterInControls ();
+	CommitChanges ();
 }
 
 
@@ -853,43 +1175,39 @@ void CDialogConfig::OnBnClickedAddMeter ()
 {
 	int	nId	= GetFreeMeterId (m_oSettings);
 
-	if (nId == 0 || !UpdateData (TRUE) || !Read100Percent ())
+	if (nId == 0 || !ReadControls (TRUE))
 	{
 		return;
 	}
 	SaveControlsToMeter (m_nCounterSel);
+	SaveGlobalFromControls ();
 
 	MeterSettings	oMeter	= m_oSettings.aMeters[m_nCounterSel];
 
 	oMeter.nId						= nId;
+	oMeter.sName					= TEXT ("");
 	oMeter.oCounter.dLearnedMax		= 0;
 	m_oSettings.aMeters.push_back (oMeter);
 	NormalizeSettings (m_oSettings);
 
 	// The list is sorted by number: find the new one
-	int	nNew	= 0;
 	for (size_t i = 0; i < m_oSettings.aMeters.size (); i++)
 	{
 		if (m_oSettings.aMeters[i].nId == nId)
 		{
-			nNew	= (int) i;
+			m_nCounterSel	= (int) i;
 		}
 	}
 
-	// The settings are already stored, so the previous meter is not stored again
-	m_nCounterSel	= nNew;
-	LoadMeterToControls (nNew);
-	FillMeterList ();
-	UpdateData (FALSE);
-	RefreshScaleControls ();
-	UpdateSwatches ();
-	UpdatePreview ();
+	ShowMeterInControls ();
+	CommitChanges ();
+	m_cMeterName.SetFocus ();
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Remove the meter that is shown. There is always at least one.
+//	Remove the meter that is shown. There is always at least one. No question: Revert brings it back.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -900,116 +1218,15 @@ void CDialogConfig::OnBnClickedRemoveMeter ()
 		return;
 	}
 
-	CString	sQuestion;
-	sQuestion.Format (TEXT ("Remove meter %d?"), m_oSettings.aMeters[m_nCounterSel].nId);
-	if (MessageBox (sQuestion, TEXT ("DiskLED: Remove meter"), MB_YESNO | MB_ICONQUESTION) != IDYES)
-	{
-		return;
-	}
-
 	m_oSettings.aMeters.erase (m_oSettings.aMeters.begin () + m_nCounterSel);
 	if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
 	{
 		m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
 	}
 
-	LoadMeterToControls (m_nCounterSel);
-	FillMeterList ();
-	UpdateData (FALSE);
-	RefreshScaleControls ();
-	UpdateSwatches ();
-	SelectPathInBrowser ();
-	UpdatePreview ();
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	Apply the settings from the dialog. Returns FALSE if the settings are incomplete.
-//
-////////////////////////////////////////////////////////////////////////////////
-
-BOOL CDialogConfig::ApplySettings ()
-{
-	// Get data into our member variables
-	if (!UpdateData (TRUE))
-	{
-		return FALSE;
-	}
-	if (!Read100Percent ())
-	{
-		return FALSE;
-	}
-
-	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
-
-	// Autostart is stored in the registry, not in the INI file
-	DWORD	nAutoStartError	= SetAutoStart (m_nAutoStart != 0);
-	if (nAutoStartError != ERROR_SUCCESS && m_pMainFrame)
-	{
-		m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("SetAutoStart"), nAutoStartError);
-	}
-
-	if (m_pMainFrame)
-	{
-		// Transmit the settings to the meters. If they do not work, the previous settings keep running and the dialog stays open for corrections.
-		if (m_pMainFrame->ApplySettings (m_oSettings) != ERROR_SUCCESS)
-		{
-			return FALSE;
-		}
-
-		// The main window corrects invalid values, show the corrected values
-		m_pMainFrame->GetSettings (m_oSettings);
-		if (m_nCounterSel >= (int) m_oSettings.aMeters.size ())
-		{
-			m_nCounterSel	= (int) m_oSettings.aMeters.size () - 1;
-		}
-		LoadGlobalToControls ();
-		LoadMeterToControls (m_nCounterSel);
-		FillMeterList ();
-		UpdateData (FALSE);
-		RefreshScaleControls ();
-		UpdateSwatches ();
-		UpdatePreview ();
-
-		// Store the new settings in the INI file?
-		if (m_nUpdateINI)
-		{
-			CString	sINIFile;
-			m_pMainFrame->GetINIFile (sINIFile);
-
-			DWORD	nError	= SaveSettings (sINIFile, m_oSettings);
-			if (nError != ERROR_SUCCESS)
-			{
-				CString	sExplanation;
-				if (nError == ERROR_ACCESS_DENIED)
-				{
-					sExplanation	= TEXT ("Access denied - could not write to the INI file: <") + sINIFile + TEXT (">");
-				}
-				else
-				{
-					sExplanation	= TEXT ("Could not write to the INI file: <") + sINIFile + TEXT (">");
-				}
-				m_pMainFrame->LogError (TEXT ("ApplySettings"), TEXT ("WriteINIValue"), nError, sExplanation);
-				return FALSE;
-			}
-		}
-	}
-
-	return TRUE;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//	The apply button was clicked
-//
-////////////////////////////////////////////////////////////////////////////////
-
-void CDialogConfig::OnBnClickedApply()
-{
-	ApplySettings ();
+	ShowMeterInControls ();
+	CommitChanges ();
+	m_cMeterList.SetFocus ();
 }
 
 
@@ -1028,6 +1245,7 @@ void CDialogConfig::OnColorButton (UINT nID)
 	{
 		m_anColors[nIndex]	= oDialog.GetColor ();
 		m_cColor[nIndex].Invalidate ();
+		NotifyChanged ();
 	}
 }
 
@@ -1098,6 +1316,11 @@ void CDialogConfig::OnTimer (UINT_PTR nIDEvent)
 	if (nIDEvent == PREVIEW_TIMER_ID)
 	{
 		UpdatePreview ();
+		return;
+	}
+	if (nIDEvent == CHANGE_TIMER_ID)
+	{
+		CommitChanges ();
 		return;
 	}
 
@@ -1521,19 +1744,19 @@ void CDialogConfig::OnBnClickedUseSelectedDataSource()
 	// Did the user select a valid data source?
 	if (m_sPerfObject.IsEmpty ())
 	{
-		MessageBox (TEXT ("Please select an object first."), TEXT ("DiskLED: Select an object"), MB_OK | MB_ICONEXCLAMATION);
+		ShowMessage (this, TEXT ("Please select an object first."), TEXT ("DiskLED: Select an object"), MB_OK | MB_ICONEXCLAMATION);
 		m_cSelectPerfObjects.SetFocus ();
 		return;
 	}
 	if (m_sPerfCounter.IsEmpty ())
 	{
-		MessageBox (TEXT ("Please select a counter first."), TEXT ("DiskLED: Select a counter"), MB_OK | MB_ICONEXCLAMATION);
+		ShowMessage (this, TEXT ("Please select a counter first."), TEXT ("DiskLED: Select a counter"), MB_OK | MB_ICONEXCLAMATION);
 		m_cSelectPerfCounters.SetFocus ();
 		return;
 	}
 	if (m_sPerfInstance.IsEmpty () && m_cSelectPerfInstances.GetCount () > 0)
 	{
-		MessageBox (TEXT ("Please select an instance first."), TEXT ("DiskLED: Select an instance"), MB_OK | MB_ICONEXCLAMATION);
+		ShowMessage (this, TEXT ("Please select an instance first."), TEXT ("DiskLED: Select an instance"), MB_OK | MB_ICONEXCLAMATION);
 		m_cSelectPerfInstances.SetFocus ();
 		return;
 	}

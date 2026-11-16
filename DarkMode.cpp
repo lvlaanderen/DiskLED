@@ -114,6 +114,10 @@ static BOOL CALLBACK ThemeChildWindow (HWND hChild, LPARAM lDark)
 		}
 		sTheme	= L"DarkMode_Explorer";
 	}
+	else if (_tcsicmp (sClass, TEXT ("ListBox")) == 0)
+	{
+		sTheme	= L"DarkMode_Explorer";
+	}
 	else if (_tcsicmp (sClass, TEXT ("ComboBox")) == 0)
 	{
 		sTheme	= L"DarkMode_CFD";

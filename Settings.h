@@ -57,6 +57,8 @@
 #define	DEFAULT_THRESHOLD_MID		50
 #define	DEFAULT_THRESHOLD_HIGH		75
 
+#define MAX_METER_NAME				32
+
 // Default values
 #define DEFAULT_ICONTYPE			LEDTYPE_FLICKER
 #define DEFAULT_COUNTER_1_PATH		TEXT ("\\PhysicalDisk(_Total)\\% Disk Time")
@@ -85,6 +87,7 @@
 
 // INI value names
 #define INI_VALUE_LEDTYPE			TEXT ("LEDType")
+#define INI_VALUE_NAME				TEXT ("Name")
 #define INI_VALUE_UPDATE_INTERVAL	TEXT ("UpdateInterval")
 #define INI_VALUE_SECOND_COUNTER	TEXT ("SecondCounter")				// Older versions. Only read.
 #define INI_VALUE_COLOR_LOW			TEXT ("ColorLow")
@@ -120,6 +123,7 @@ struct CounterSettings
 struct MeterSettings
 {
 	int				nId;				// 1 to MAX_METERS. Stays the same when other meters are removed, it names the INI section and the tray icon.
+	CString			sName;				// Optional name, shown in the tooltip and the list of meters
 	DWORD			nIconType;			// LEDTYPE_*
 	COLORREF		anColors[3];		// Low, mid and high colour
 	int				nThresholdMid;		// % of the scale where the mid colour starts
@@ -147,6 +151,9 @@ void	NormalizeSettings (DiskLEDSettings& oSettings);
 
 // The smallest meter number that is not used yet, 0 if there are MAX_METERS meters
 int		GetFreeMeterId (const DiskLEDSettings& oSettings);
+
+// Are the settings the same once invalid values are corrected? What the auto scale has learned is not compared.
+BOOL	AreSettingsEqual (const DiskLEDSettings& oFirst, const DiskLEDSettings& oSecond);
 
 // The name of a meter's INI section
 CString	GetMeterSection (int nId);

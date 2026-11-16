@@ -139,6 +139,36 @@ void CMeter::ResetState ()
 	m_nBadSamples	= 0;
 }
 
+void CMeter::UpdateSettings (const MeterSettings& oSettings)
+{
+	double	dLearned	= m_oRuntime.dLearned;
+
+	m_oSettings	= oSettings;
+	m_oSettings.oCounter.dLearnedMax	= dLearned;
+
+	MakeIconStyle (m_oSettings, m_oStyle);
+	m_oIcon.nValueFormat	= m_oSettings.oCounter.nValueFormat;
+	UpdateCeiling ();
+
+	// Draw the icon again, the new scale and look apply with the next sample
+	m_nIconKey	= ICONKEY_NONE;
+}
+
+// The auto scale cannot learn a maximum above the speed of the network adapter
+void CMeter::UpdateCeiling ()
+{
+	m_oRuntime.dCeiling	= 0;
+	if (m_oSettings.oCounter.nScaleMode == SCALEMODE_AUTO)
+	{
+		double	dSpeed	= 0;
+
+		if (GetNetworkLinkSpeed (m_oSettings.oCounter.sPath, dSpeed))
+		{
+			m_oRuntime.dCeiling	= dSpeed;
+		}
+	}
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -170,16 +200,7 @@ DWORD CMeter::Connect (PDH_HQUERY hQuery, CString& sError)
 	}
 
 	// The auto scale cannot learn a maximum above the speed of the network adapter
-	m_oRuntime.dCeiling	= 0;
-	if (m_oSettings.oCounter.nScaleMode == SCALEMODE_AUTO)
-	{
-		double	dSpeed	= 0;
-
-		if (GetNetworkLinkSpeed (sPath, dSpeed))
-		{
-			m_oRuntime.dCeiling	= dSpeed;
-		}
-	}
+	UpdateCeiling ();
 
 	return ERROR_SUCCESS;
 }
@@ -196,6 +217,12 @@ void CMeter::Disconnect ()
 //	The name of the counter for tooltips and alerts: the last part of its path
 //
 ////////////////////////////////////////////////////////////////////////////////
+
+// The name for tooltips and alerts: the name of the meter, or the last part of the counter path
+CString CMeter::GetName () const
+{
+	return m_oSettings.sName.IsEmpty () ? GetCounterLabel () : m_oSettings.sName;
+}
 
 CString CMeter::GetCounterLabel () const
 {
@@ -215,20 +242,30 @@ CString CMeter::GetCounterLabel () const
 	return sCounter;
 }
 
-// The current value and the counter path
+// The current value and the counter path, with the name of the meter if it has one
 CString CMeter::GetTooltip () const
 {
 	const CounterSettings&	oCounter	= m_oSettings.oCounter;
+	CString					sValue		= FormatValue (oCounter.nValueFormat, m_oIcon.dValue, m_oIcon.dScale, oCounter.nScaleMode == SCALEMODE_FIXED);
 
-	return FormatValue (oCounter.nValueFormat, m_oIcon.dValue, m_oIcon.dScale, oCounter.nScaleMode == SCALEMODE_FIXED)
-		+ TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
+	if (!m_oSettings.sName.IsEmpty ())
+	{
+		return m_oSettings.sName + TEXT (": ") + sValue + TEXT ("\n") + oCounter.sPath;
+	}
+
+	return sValue + TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
+}
+
+CString CMeter::GetTooltipPrefix () const
+{
+	return m_oSettings.sName.IsEmpty () ? CString (PROGRAM_NAME) : m_oSettings.sName;
 }
 
 void CMeter::SetInitialTooltip ()
 {
 	if (m_pTray)
 	{
-		m_pTray->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + m_oSettings.oCounter.sPath);
+		m_pTray->SetTooltipText (GetTooltipPrefix () + TEXT (" - ") + m_oSettings.oCounter.sPath);
 	}
 }
 
@@ -269,7 +306,7 @@ void CMeter::ShowError (const CString& sMessage, BOOL bBalloon)
 	SetTrayIcon ((HICON) LoadImage (AfxGetResourceHandle (), MAKEINTRESOURCE (IDI_ICON6), IMAGE_ICON, nSize, nSize, 0));
 	if (m_pTray)
 	{
-		m_pTray->SetTooltipText (CString (PROGRAM_NAME) + TEXT (" - ") + sMessage);
+		m_pTray->SetTooltipText (GetTooltipPrefix () + TEXT (" - ") + sMessage);
 	}
 
 	// Report the problem once per error period
@@ -345,7 +382,7 @@ void CMeter::CheckAlert ()
 		CString	sText;
 
 		m_oRuntime.bAlerted	= TRUE;
-		sText.Format (TEXT ("%s: %s, above %d%% of the scale for %d s."), (LPCTSTR) GetCounterLabel (),
+		sText.Format (TEXT ("%s: %s, above %d%% of the scale for %d s."), (LPCTSTR) GetName (),
 			(LPCTSTR) FormatValue (oCounter.nValueFormat, m_oIcon.dValue, m_oIcon.dScale, oCounter.nScaleMode == SCALEMODE_FIXED),
 			oCounter.nAlertPercent, oCounter.nAlertSeconds);
 
