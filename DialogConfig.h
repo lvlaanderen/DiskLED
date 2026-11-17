@@ -147,8 +147,6 @@ private:
 	BOOL		CommitChanges ();
 	void		UpdateDirtyState ();
 	BOOL		SaveNow ();
-	void		LoadGlobalToControls ();
-	void		SaveGlobalFromControls ();
 	void		LoadMeterToControls (int nMeter);
 	void		SaveControlsToMeter (int nMeter);
 	void		FillMeterList ();

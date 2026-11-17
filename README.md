@@ -30,15 +30,12 @@ The settings are stored in `%AppData%\DiskLED\DiskLED.ini`, so DiskLED works fro
 
 ### The INI file
 
-The file can be edited by hand while DiskLED is not running. Settings that do not belong to a meter are in `[General]`, every meter has a section `[Meter 1]`, `[Meter 2]` and so on. The number of a meter stays the same when other meters are removed. There can be up to 16 meters. Files of version 2.1 and older (`[Performance Counter 1]` and `[Performance Counter 2]`) are still read: a file with a second counter becomes two meters, and the old sections are replaced when you save.
-
-`[General]`:
-
-- `UpdateInterval`: milliseconds between updates for all meters, 10 to 3600000. Use about 1000 for the graph.
+The file can be edited by hand while DiskLED is not running. Every meter has a section `[Meter 1]`, `[Meter 2]` and so on. The number of a meter stays the same when other meters are removed. There can be up to 16 meters. Files of version 2.1 and older (`[Performance Counter 1]` and `[Performance Counter 2]`) are still read: a file with a second counter becomes two meters, and the old sections are replaced when you save. Version 3.0 had one `UpdateInterval` for all meters in `[General]`: meters without their own interval start with that one, and it is removed when you save.
 
 `[Meter n]`:
 
 - `Name`: an optional name, up to 32 characters.
+- `UpdateInterval`: milliseconds between two readings of this meter, 10 to 3600000. A reading covers the whole interval, so a network speed read every 1000 ms is the average of that second. When you choose a data source the interval is filled in: 30 for disks (the LED flickers with every access), 100 for processors, 1000 for network speeds, memory and other counters.
 - `LEDType`: the icon type, see below.
 - `ColorLow`, `ColorMid`, `ColorHigh`: the colours as `RRGGBB` hex, for example `00DC00`.
 - `ThresholdMid`, `ThresholdHigh`: the percentage of the scale where the mid and the high colour start (defaults 50 and 75). The LED only uses the low colour.
@@ -63,6 +60,8 @@ The file can be edited by hand while DiskLED is not running. Settings that do no
 ### Tray icons
 
 Every meter is its own icon. Windows may put new icons in the overflow area first: drag them to the visible part of the tray once, Windows remembers where you put them. Windows remembers an icon by the program and the number of the meter, so after moving DiskLED to another folder the icons are new again.
+
+Windows 11 treats icons of one program that appear with the same tooltip as one icon, so they would be shown, hidden and moved together. Every meter's icon therefore appears with its own tooltip (`DiskLED meter <number> - <name>`) until its first reading. Version 3.0 did not do this: if you used it, meter 1 keeps its place and the other meters appear as new icons once, which you can then place one by one.
 
 ### Start with Windows
 
@@ -92,12 +91,10 @@ When DiskLED starts without settings (the first start) and finds an older copy, 
 Internet download and upload speed, as two meters with a graph:
 
 ```ini
-[General]
-UpdateInterval=1000
-
 [Meter 1]
 Name=Download
 LEDType=Graph
+UpdateInterval=1000
 Path=\Network Interface(<your adapter>)\Bytes Received/sec
 100% Utilization=43750000
 ValueFormat=Bits
@@ -106,6 +103,7 @@ ScaleMode=Decay
 [Meter 2]
 Name=Upload
 LEDType=Graph
+UpdateInterval=1000
 Path=\Network Interface(<your adapter>)\Bytes Sent/sec
 100% Utilization=12500000
 ValueFormat=Bits
@@ -140,5 +138,5 @@ msbuild DiskLED.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformTool
 `installer\Build-Release.ps1` builds the x64 and x86 programs and makes the zip files in `dist\`. If [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed it also makes the setup programs (`installer\DiskLED.iss`):
 
 ```
-powershell -ExecutionPolicy Bypass -File installer\Build-Release.ps1 -Version 3.0
+powershell -ExecutionPolicy Bypass -File installer\Build-Release.ps1 -Version 3.1
 ```

@@ -12,8 +12,11 @@
 // The name of the program
 #define PROGRAM_NAME				TEXT ("DiskLED")
 
-// Minimum time between two tooltip updates
+// Minimum time between two tooltip updates of a meter
 #define	TOOLTIP_UPDATE_MS			500
+
+// The timer wakes up at least this often (retries after errors, failed tray icons), even when no meter is due
+#define	TIMER_MAX_WAIT_MS			500
 
 // Time between attempts to reconnect to the counters after an error
 #define	PDH_RETRY_MS				5000
@@ -29,6 +32,7 @@
 
 
 // The main window (hidden). It owns the meters, the one PDH query that all their counters are in, and the timer.
+// The timer is set to the next meter that is due; the query is collected then and every due meter reads its counter.
 class CMainFrame : public CFrameWnd
 {
 // Operations
@@ -60,9 +64,7 @@ private:
 	UINT_PTR				m_TimerID;				// Timer ID
 	PDH_HQUERY				m_hQuery;
 	CString					m_sINIFile;
-	DWORD					m_nUpdateInterval;		// ms
 
-	DWORD					m_nLastTooltipTick;				// Tick count of the last tooltip update
 	BOOL					m_bPdhError;					// The query could not be opened or read, reconnecting every PDH_RETRY_MS
 	DWORD					m_nRetryTick;					// Tick count of the last (re)connection attempt after an error
 	DWORD					m_nMeterRetryTick;				// Tick count of the last attempt to add the counters of meters that failed
@@ -79,10 +81,13 @@ private:
 	void					Shutdown ();
 	DWORD					Initialize (const DiskLEDSettings& oSettings, BOOL bSilent);
 	DWORD					StartTimer ();
+	DWORD					ScheduleTimer (DWORD nDelay);
+	void					ScheduleNextSample ();
+	void					Sample (DWORD nTick);
 	DWORD					InitPDH (BOOL bSilent);
 	DWORD					ClosePDH ();
 	DWORD					ReadSettings (DiskLEDSettings& oSettings);
-	void					UpdateMeters (BOOL bTooltips);
+	void					UpdateMeters (DWORD nTick);
 	void					ShowErrorState (const CString& sMessage, BOOL bBalloon);
 	void					ClearErrorState ();
 	void					HandlePdhError (const CString& sCaller, DWORD nError);

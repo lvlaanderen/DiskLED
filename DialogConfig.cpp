@@ -251,20 +251,9 @@ void CDialogConfig::OnTcnSelchangeTab (NMHDR*, LRESULT* pResult)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Settings <-> controls
-//	The settings that do not belong to a counter, and the settings of the counter being edited
+//	Settings <-> controls: the settings of the meter being edited
 //
 ////////////////////////////////////////////////////////////////////////////////
-
-void CDialogConfig::LoadGlobalToControls ()
-{
-	m_nUpdateFrequency	= m_oSettings.nUpdateInterval;
-}
-
-void CDialogConfig::SaveGlobalFromControls ()
-{
-	m_oSettings.nUpdateInterval	= m_nUpdateFrequency;
-}
 
 // The meter: its icon look and its counter
 void CDialogConfig::LoadMeterToControls (int nMeter)
@@ -290,6 +279,7 @@ void CDialogConfig::LoadMeterToControls (int nMeter)
 	m_nInvert			= oCounter.bInvert ? 1 : 0;
 	m_nAlertPercent		= oCounter.nAlertPercent;
 	m_nAlertSeconds		= oCounter.nAlertSeconds;
+	m_nUpdateFrequency	= oCounter.nUpdateInterval;
 }
 
 void CDialogConfig::SaveControlsToMeter (int nMeter)
@@ -313,6 +303,7 @@ void CDialogConfig::SaveControlsToMeter (int nMeter)
 	oCounter.bInvert		= (m_nInvert != 0);
 	oCounter.nAlertPercent	= m_nAlertPercent;
 	oCounter.nAlertSeconds	= m_nAlertSeconds;
+	oCounter.nUpdateInterval	= m_nUpdateFrequency;
 }
 
 void CDialogConfig::UpdateSwatches ()
@@ -432,6 +423,7 @@ void CDialogConfig::ApplyCounterDefaults ()
 	m_d100Percent		= oCounter.d100Percent;
 	m_s100Percent		= FormatScaleValue (oCounter.nValueFormat, oCounter.d100Percent);
 	m_s100PercentShown	= m_s100Percent;
+	m_nUpdateFrequency	= oCounter.nUpdateInterval;
 
 	// What was learned belongs to the previous data source
 	m_oSettings.aMeters[m_nCounterSel].oCounter.dLearnedMax	= 0;
@@ -661,7 +653,6 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cMeterName.SetLimitText (MAX_METER_NAME);
 
 	m_bLoading	= TRUE;
-	LoadGlobalToControls ();
 	LoadMeterToControls (m_nCounterSel);
 	FillMeterList ();
 
@@ -807,7 +798,6 @@ void CDialogConfig::ShowMeterInControls ()
 {
 	m_bLoading	= TRUE;
 
-	LoadGlobalToControls ();
 	LoadMeterToControls (m_nCounterSel);
 	FillMeterList ();
 	UpdateData (FALSE);
@@ -847,7 +837,6 @@ BOOL CDialogConfig::CommitChanges ()
 	}
 
 	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
 
 	if (m_pMainFrame && !AreSettingsEqual (m_oSettings, m_oApplied))
 	{
@@ -934,7 +923,6 @@ BOOL CDialogConfig::SaveNow ()
 	}
 
 	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
 	KillTimer (CHANGE_TIMER_ID);
 
 	if (m_pMainFrame)
@@ -1159,7 +1147,6 @@ void CDialogConfig::OnLbnSelchangeMeterList ()
 	}
 
 	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
 	m_nCounterSel	= nNew;
 	ShowMeterInControls ();
 	CommitChanges ();
@@ -1199,7 +1186,6 @@ void CDialogConfig::ShowWizard (BOOL bStartWithImport)
 		return;
 	}
 	SaveControlsToMeter (m_nCounterSel);
-	SaveGlobalFromControls ();
 
 	// The wizard makes the new meter, or takes over meters of older copies. "Another counter" makes a copy of the current meter, to be set up with the lists.
 	CDialogWizard	oWizard (this, m_oSettings, bStartWithImport);

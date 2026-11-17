@@ -16,19 +16,23 @@ static char THIS_FILE[] = __FILE__;
 #endif
 
 
-CMeter::CMeter (CWnd* pOwner, const MeterSettings& oSettings, DWORD nUpdateInterval)
+CMeter::CMeter (CWnd* pOwner, const MeterSettings& oSettings)
 {
 	m_pOwner		= pOwner;
 	m_pTray			= NULL;
 	m_hIcon			= NULL;
 	m_nIconKey		= ICONKEY_NONE;
 	m_hCounter		= NULL;
+	m_bHaveRaw		= FALSE;
+	m_nNextSampleTick	= 0;
+	m_nTooltipTick	= 0;
 	m_nBadSamples	= 0;
 	m_bError		= FALSE;
 	m_bErrorShown	= FALSE;
 
+	SecureZeroMemory (&m_oRawPrevious, sizeof (m_oRawPrevious));
 	SetDefaultMeterSettings (m_oSettings, oSettings.nId);
-	SetSettings (oSettings, nUpdateInterval);
+	SetSettings (oSettings);
 }
 
 CMeter::~CMeter ()
@@ -62,8 +66,9 @@ void CMeter::Create ()
 	m_pTray	= new CSystemTray;
 	m_pTray->SetMenuID (IDR_POPUP_MENU);
 
-	// If the shell is not ready yet, the icon is added later (when its icon or tooltip is set)
-	m_pTray->Create (m_pOwner, WM_ICON_NOTIFY, PROGRAM_NAME, theApp.m_hIcon, TRAY_ICON_ID_BASE + m_oSettings.nId);
+	// Windows 11 treats icons of one program that are added with the same tooltip as one icon: they would be promoted and moved together.
+	// Every meter's icon is added with its own tooltip. If the shell is not ready yet, the icon is added later (when its icon or tooltip is set).
+	m_pTray->Create (m_pOwner, WM_ICON_NOTIFY, GetUniqueTooltip (), theApp.m_hIcon, TRAY_ICON_ID_BASE + m_oSettings.nId);
 }
 
 void CMeter::RemoveTrayIcon ()
@@ -103,7 +108,7 @@ void CMeter::SetTrayIcon (HICON hNew)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CMeter::SetSettings (const MeterSettings& oSettings, DWORD nUpdateInterval)
+void CMeter::SetSettings (const MeterSettings& oSettings)
 {
 	MeterSettings	oPrevious	= m_oSettings;
 
@@ -142,6 +147,7 @@ void CMeter::ResetState ()
 void CMeter::UpdateSettings (const MeterSettings& oSettings)
 {
 	double	dLearned	= m_oRuntime.dLearned;
+	DWORD	nInterval	= m_oSettings.oCounter.nUpdateInterval;
 
 	m_oSettings	= oSettings;
 	m_oSettings.oCounter.dLearnedMax	= dLearned;
@@ -149,6 +155,12 @@ void CMeter::UpdateSettings (const MeterSettings& oSettings)
 	MakeIconStyle (m_oSettings, m_oStyle);
 	m_oIcon.nValueFormat	= m_oSettings.oCounter.nValueFormat;
 	UpdateCeiling ();
+
+	// A new interval applies from now on, not only after the previous (possibly long) one
+	if (m_oSettings.oCounter.nUpdateInterval != nInterval)
+	{
+		m_nNextSampleTick	= GetTickCount () + m_oSettings.oCounter.nUpdateInterval;
+	}
 
 	// Draw the icon again, the new scale and look apply with the next sample
 	m_nIconKey	= ICONKEY_NONE;
@@ -181,6 +193,7 @@ DWORD CMeter::Connect (PDH_HQUERY hQuery, CString& sError)
 	const CString&	sPath	= m_oSettings.oCounter.sPath;
 
 	m_hCounter	= NULL;
+	m_bHaveRaw	= FALSE;
 
 	// Prefer the English path, which works on any system language. Older INI files contain paths in the system language.
 	PDH_STATUS	nError	= PdhAddEnglishCounter (hQuery, sPath, 0, &m_hCounter);
@@ -209,6 +222,7 @@ DWORD CMeter::Connect (PDH_HQUERY hQuery, CString& sError)
 void CMeter::Disconnect ()
 {
 	m_hCounter	= NULL;
+	m_bHaveRaw	= FALSE;
 }
 
 
@@ -261,20 +275,36 @@ CString CMeter::GetTooltipPrefix () const
 	return m_oSettings.sName.IsEmpty () ? CString (PROGRAM_NAME) : m_oSettings.sName;
 }
 
+// Different for every meter, also for meters with the same name and counter
+CString CMeter::GetUniqueTooltip () const
+{
+	CString	sTooltip;
+
+	sTooltip.Format (TEXT ("%s meter %d - %s"), PROGRAM_NAME, m_oSettings.nId, (LPCTSTR) GetName ());
+	sTooltip.Truncate (127);
+
+	return sTooltip;
+}
+
 void CMeter::SetInitialTooltip ()
 {
+	// Unique, like the tooltip the icon is added with: if the shell was not ready, the icon is added later with this one
 	if (m_pTray)
 	{
-		m_pTray->SetTooltipText (GetTooltipPrefix () + TEXT (" - ") + m_oSettings.oCounter.sPath);
+		m_pTray->SetTooltipText (GetUniqueTooltip ());
 	}
 }
 
-void CMeter::UpdateTooltip ()
+// The tooltip shows the value as text: the shell does not need it more often than TOOLTIP_UPDATE_MS
+void CMeter::UpdateTooltip (DWORD nTick)
 {
-	if (m_pTray)
+	if (m_pTray == NULL || (m_nTooltipTick != 0 && nTick - m_nTooltipTick < TOOLTIP_UPDATE_MS))
 	{
-		m_pTray->SetTooltipText (GetTooltip ());
+		return;
 	}
+
+	m_nTooltipTick	= nTick ? nTick : 1;
+	m_pTray->SetTooltipText (GetTooltip ());
 }
 
 // Icons are only redrawn when what they show changes
@@ -326,6 +356,7 @@ void CMeter::ClearError ()
 	m_bErrorShown	= FALSE;
 	m_nBadSamples	= 0;
 	m_nIconKey		= ICONKEY_NONE;
+	m_nTooltipTick	= 0;
 }
 
 
@@ -398,32 +429,87 @@ void CMeter::CheckAlert ()
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Read the counter and update the scale and the alert
+//	When the counter is read next. A counter without a previous raw value is read as soon as possible, to have a starting point.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-int CMeter::Update (DWORD nTick, DWORD nUpdateInterval, DWORD& nPdhError)
+DWORD CMeter::GetTimeToNextSample (DWORD nTick) const
+{
+	if (!m_bHaveRaw)
+	{
+		return 0;
+	}
+
+	int	nLeft	= (int) (m_nNextSampleTick - nTick);
+
+	return (nLeft <= SAMPLE_SLACK_MS) ? 0 : (DWORD) nLeft;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	Read the counter and update the scale and the alert
+//	The value is computed from the raw values of this and the previous reading of this meter, so it covers the meter's own interval
+//	even though the shared query is collected more often for faster meters
+//
+////////////////////////////////////////////////////////////////////////////////
+
+int CMeter::Update (DWORD nTick, DWORD& nPdhError)
 {
 	const CounterSettings&	oCounter	= m_oSettings.oCounter;
+	DWORD					nInterval	= oCounter.nUpdateInterval;
+	PDH_RAW_COUNTER			oRaw;
 	PDH_FMT_COUNTERVALUE	oValue;
 
-	// Get the counter data as floating point number. Percentage counters are not capped at 100 (e.g. a process using several cores).
-	nPdhError	= PdhGetFormattedCounterValue (m_hCounter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, 0, &oValue);
+	nPdhError	= ERROR_SUCCESS;
+	if (GetTimeToNextSample (nTick) > 0)
+	{
+		return SAMPLE_NOT_DUE;
+	}
+
+	// Keep a steady rhythm. After a pause (sleep, a busy system) start again from now.
+	m_nNextSampleTick	+= nInterval;
+	if (!m_bHaveRaw || (int) (m_nNextSampleTick - nTick) <= 0)
+	{
+		m_nNextSampleTick	= nTick + nInterval;
+	}
+
+	SecureZeroMemory (&oRaw, sizeof (oRaw));
+	nPdhError	= PdhGetRawCounterValue (m_hCounter, NULL, &oRaw);
 	if (nPdhError != ERROR_SUCCESS)
 	{
-		if (nPdhError == PDH_CALC_NEGATIVE_VALUE || nPdhError == PDH_CALC_NEGATIVE_DENOMINATOR || nPdhError == PDH_CALC_NEGATIVE_TIMEBASE)
-		{
-			// This (PDH_CALC_NEGATIVE_VALUE) happens on Windows 7 RTM if a USB flash drive is inserted.
-			// The algorithm probably has a bug in that it returns a negative value because of the additional disk which cannot be converted to LONG.
-			// A single such sample is ignored, a persistent one means the query is stale.
-			m_nBadSamples++;
-			return SAMPLE_UNUSABLE;
-		}
-
 		return SAMPLE_ERROR;
 	}
 
 	// The call can succeed with a value that is not valid (e.g. the network adapter instance is gone)
+	if (oRaw.CStatus != PDH_CSTATUS_VALID_DATA && oRaw.CStatus != PDH_CSTATUS_NEW_DATA)
+	{
+		m_nBadSamples++;
+		return SAMPLE_UNUSABLE;
+	}
+
+	// The first reading is only the starting point
+	if (!m_bHaveRaw)
+	{
+		m_oRawPrevious	= oRaw;
+		m_bHaveRaw		= TRUE;
+		return SAMPLE_NOT_DUE;
+	}
+
+	// Get the counter data as floating point number. Percentage counters are not capped at 100 (e.g. a process using several cores).
+	PDH_STATUS	nCalcError	= PdhCalculateCounterFromRawValue (m_hCounter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, &oRaw, &m_oRawPrevious, &oValue);
+
+	m_oRawPrevious	= oRaw;
+	if (nCalcError != ERROR_SUCCESS)
+	{
+		// PDH_CALC_NEGATIVE_VALUE happens on Windows 7 RTM if a USB flash drive is inserted.
+		// The algorithm probably has a bug in that it returns a negative value because of the additional disk which cannot be converted to LONG.
+		// A single such sample is ignored, a persistent one means the query is stale.
+		m_nBadSamples++;
+		return SAMPLE_UNUSABLE;
+	}
+
+	// The calculation can succeed with a value that is not valid
 	if (oValue.CStatus != PDH_CSTATUS_VALID_DATA && oValue.CStatus != PDH_CSTATUS_NEW_DATA)
 	{
 		m_nBadSamples++;
@@ -464,7 +550,7 @@ int CMeter::Update (DWORD nTick, DWORD nUpdateInterval, DWORD& nPdhError)
 	else if (oCounter.nScaleMode == SCALEMODE_DECAY)
 	{
 		// The peak falls by half every DECAY_HALFLIFE_MS (measured, the timer is not exact), a higher value becomes the new peak
-		DWORD	nElapsed	= (m_oRuntime.nLastTick != 0) ? nTick - m_oRuntime.nLastTick : nUpdateInterval;
+		DWORD	nElapsed	= (m_oRuntime.nLastTick != 0) ? nTick - m_oRuntime.nLastTick : nInterval;
 		if (nElapsed > 60000)
 		{
 			nElapsed	= 60000;
@@ -480,7 +566,7 @@ int CMeter::Update (DWORD nTick, DWORD nUpdateInterval, DWORD& nPdhError)
 	else if (oCounter.nScaleMode == SCALEMODE_AUTO)
 	{
 		// The learned maximum rises with every new high and falls very slowly. Nothing above the adapter speed can be real.
-		DWORD	nElapsed	= (m_oRuntime.nLastTick != 0) ? nTick - m_oRuntime.nLastTick : nUpdateInterval;
+		DWORD	nElapsed	= (m_oRuntime.nLastTick != 0) ? nTick - m_oRuntime.nLastTick : nInterval;
 		if (nElapsed > 60000)
 		{
 			nElapsed	= 60000;

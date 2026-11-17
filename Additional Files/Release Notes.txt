@@ -6,6 +6,12 @@ The original DiskLED by Helge Klein:  https://helgeklein.com/free-tools/diskled/
 DiskLED is licensed under the Apache License 2.0, see LICENSE.txt.
 
 
+#### Version 3.1.0 (fork) ####
+
+- Every meter has its own update interval (Appearance page). A processor meter can update ten times a second while a download speed meter updates once a second. A reading covers the meter's whole interval, so a network speed is the average of that second rather than of the last few milliseconds. Choosing a data source fills in a suitable interval: 30 ms for disks, 100 ms for processors, 1 second for network speeds, memory and other counters. Your existing meters keep the interval they had.
+- Tray icons can now be moved one by one. Windows 11 treated the icons of all meters as one, so dragging one icon out of the overflow area took all of them along and they could not be put in another order. If you used version 3.0, the meters other than the first appear as new icons once: drag each to where you want it.
+
+
 #### Version 3.0.0 (fork) ####
 
 Several meters in one program:

@@ -124,6 +124,7 @@ void SetDefaultCounterSettings (CounterSettings& oCounter)
 	oCounter.bInvert		= FALSE;
 	oCounter.nAlertPercent	= 0;
 	oCounter.nAlertSeconds	= DEFAULT_ALERT_SECONDS;
+	oCounter.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
 }
 
 
@@ -147,6 +148,7 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 	oCounter.nValueFormat	= VALUEFORMAT_NUMBER;
 	oCounter.nScaleMode		= SCALEMODE_AUTO;
 	oCounter.d100Percent	= 1;
+	oCounter.nUpdateInterval	= SLOW_UPDATE_INTERVAL_MS;
 
 	if (!ParsePerfPath (sEnglishPath, sMachine, sObject, sInstance, sCounter))
 	{
@@ -154,6 +156,16 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 	}
 	sObject.MakeLower ();
 	sCounter.MakeLower ();
+
+	// How often to read: the disk LED flickers with every access, a processor needs a little time to give a meaningful value, speeds and amounts change slowly
+	if (sObject == TEXT ("physicaldisk") || sObject == TEXT ("logicaldisk"))
+	{
+		oCounter.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
+	}
+	else if (sObject.Left (9) == TEXT ("processor"))
+	{
+		oCounter.nUpdateInterval	= PROCESSOR_UPDATE_INTERVAL_MS;
+	}
 
 	if (sCounter.Find (TEXT ("%")) >= 0)
 	{
@@ -213,7 +225,6 @@ void SetDefaultSettings (DiskLEDSettings& oSettings)
 
 	SetDefaultMeterSettings (oMeter, 1);
 
-	oSettings.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
 	oSettings.aMeters.clear ();
 	oSettings.aMeters.push_back (oMeter);
 }
@@ -314,24 +325,23 @@ void NormalizeMeterSettings (MeterSettings& oMeter)
 	{
 		oCounter.nAlertSeconds	= MAX_ALERT_SECONDS;
 	}
+	if ((int) oCounter.nUpdateInterval <= 0)
+	{
+		// 0 and negative numbers (read as huge unsigned values)
+		oCounter.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
+	}
+	else if (oCounter.nUpdateInterval < MIN_UPDATE_INTERVAL_MS)
+	{
+		oCounter.nUpdateInterval	= MIN_UPDATE_INTERVAL_MS;
+	}
+	else if (oCounter.nUpdateInterval > MAX_UPDATE_INTERVAL_MS)
+	{
+		oCounter.nUpdateInterval	= MAX_UPDATE_INTERVAL_MS;
+	}
 }
 
 void NormalizeSettings (DiskLEDSettings& oSettings)
 {
-	if ((int) oSettings.nUpdateInterval <= 0)
-	{
-		// 0 and negative numbers (read as huge unsigned values)
-		oSettings.nUpdateInterval	= DEFAULT_UPDATE_INTERVAL_MS;
-	}
-	else if (oSettings.nUpdateInterval < MIN_UPDATE_INTERVAL_MS)
-	{
-		oSettings.nUpdateInterval	= MIN_UPDATE_INTERVAL_MS;
-	}
-	else if (oSettings.nUpdateInterval > MAX_UPDATE_INTERVAL_MS)
-	{
-		oSettings.nUpdateInterval	= MAX_UPDATE_INTERVAL_MS;
-	}
-
 	// Meters with a number that is out of range or already taken get the next free one, and too many meters are dropped
 	std::vector<MeterSettings>	aMeters;
 
@@ -397,7 +407,7 @@ BOOL AreSettingsEqual (const DiskLEDSettings& oFirst, const DiskLEDSettings& oSe
 	NormalizeSettings (oA);
 	NormalizeSettings (oB);
 
-	if (oA.nUpdateInterval != oB.nUpdateInterval || oA.aMeters.size () != oB.aMeters.size ())
+	if (oA.aMeters.size () != oB.aMeters.size ())
 	{
 		return FALSE;
 	}
@@ -415,7 +425,7 @@ BOOL AreSettingsEqual (const DiskLEDSettings& oFirst, const DiskLEDSettings& oSe
 			|| oCounterA.sPath.CompareNoCase (oCounterB.sPath) != 0 || oCounterA.d100Percent != oCounterB.d100Percent
 			|| oCounterA.nValueFormat != oCounterB.nValueFormat || oCounterA.nScaleMode != oCounterB.nScaleMode
 			|| (oCounterA.bInvert != 0) != (oCounterB.bInvert != 0) || oCounterA.nAlertPercent != oCounterB.nAlertPercent
-			|| oCounterA.nAlertSeconds != oCounterB.nAlertSeconds)
+			|| oCounterA.nAlertSeconds != oCounterB.nAlertSeconds || oCounterA.nUpdateInterval != oCounterB.nUpdateInterval)
 		{
 			return FALSE;
 		}
@@ -474,6 +484,10 @@ static void LoadCounterSettings (const CString& sINIFile, const CString& sSectio
 	{
 		oCounter.nAlertSeconds	= _ttoi (sData);
 	}
+	if (ReadINIValue (sINIFile, sSection, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
+	{
+		oCounter.nUpdateInterval	= (DWORD) _ttoi (sData);
+	}
 }
 
 
@@ -530,15 +544,12 @@ static void LoadLegacySettings (const CString& sINIFile, DiskLEDSettings& oSetti
 
 	SetDefaultMeterSettings (oMeter, 1);
 
-	if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
-	{
-		oSettings.nUpdateInterval	= (DWORD) _ttoi (sData);
-	}
 	if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_SECOND_COUNTER, &sData) == ERROR_SUCCESS)
 	{
 		bSecondCounter	= (_ttoi (sData) != 0);
 	}
 
+	// The first section also holds the update interval that both counters shared
 	LoadMeterStyle (sINIFile, INI_LEGACY_COUNTER_1_SECTION, oMeter);
 	LoadCounterSettings (sINIFile, INI_LEGACY_COUNTER_1_SECTION, oMeter.oCounter);
 	oSettings.aMeters.clear ();
@@ -551,6 +562,7 @@ static void LoadLegacySettings (const CString& sINIFile, DiskLEDSettings& oSetti
 		SetDefaultCounterSettings (oSecond.oCounter);
 		oSecond.nId				= 2;
 		oSecond.oCounter.sPath	= TEXT ("");
+		oSecond.oCounter.nUpdateInterval	= oMeter.oCounter.nUpdateInterval;
 		LoadCounterSettings (sINIFile, INI_LEGACY_COUNTER_2_SECTION, oSecond.oCounter);
 		if (!oSecond.oCounter.sPath.IsEmpty ())
 		{
@@ -601,6 +613,14 @@ DWORD LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings)
 
 	GetINISectionNames (sINIFile, asSections);
 
+	// Version 3.0 had one update interval for all meters: it is the interval of the meters that do not have their own
+	DWORD	nGeneralInterval	= DEFAULT_UPDATE_INTERVAL_MS;
+
+	if (ReadINIValue (sINIFile, INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
+	{
+		nGeneralInterval	= (DWORD) _ttoi (sData);
+	}
+
 	std::vector<MeterSettings>	aMeters;
 
 	for (int i = 0; i < asSections.GetSize (); i++)
@@ -616,6 +636,7 @@ DWORD LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings)
 		MeterSettings	oMeter;
 
 		SetDefaultMeterSettings (oMeter, nId);
+		oMeter.oCounter.nUpdateInterval	= nGeneralInterval;
 		LoadMeterStyle (sINIFile, asSections[i], oMeter);
 		LoadCounterSettings (sINIFile, asSections[i], oMeter.oCounter);
 		aMeters.push_back (oMeter);
@@ -624,10 +645,6 @@ DWORD LoadSettings (const CString& sINIFile, DiskLEDSettings& oSettings)
 	if (!aMeters.empty ())
 	{
 		oSettings.aMeters	= aMeters;
-		if (ReadINIValue (sINIFile, INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, &sData) == ERROR_SUCCESS)
-		{
-			oSettings.nUpdateInterval	= (DWORD) _ttoi (sData);
-		}
 	}
 	else if (ReadINIValue (sINIFile, INI_LEGACY_COUNTER_1_SECTION, INI_VALUE_PATH, &sData) == ERROR_SUCCESS)
 	{
@@ -677,6 +694,10 @@ static DWORD SaveCounterSettings (const CString& sINIFile, const CString& sSecti
 	if (nError == ERROR_SUCCESS)
 	{
 		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_ALERT_SECONDS, (int) oCounter.nAlertSeconds);
+	}
+	if (nError == ERROR_SUCCESS)
+	{
+		nError	= WriteINIValue (sINIFile, sSection, INI_VALUE_UPDATE_INTERVAL, (int) oCounter.nUpdateInterval);
 	}
 
 	return nError;
@@ -731,14 +752,15 @@ DWORD SaveSettings (const CString& sINIFile, const DiskLEDSettings& oSettings)
 {
 	DWORD	nError	= CreateParentFolder (sINIFile);
 
-	if (nError == ERROR_SUCCESS)
-	{
-		nError	= WriteINIValue (sINIFile, INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, (int) oSettings.nUpdateInterval);
-	}
-
 	for (size_t i = 0; i < oSettings.aMeters.size () && nError == ERROR_SUCCESS; i++)
 	{
 		nError	= SaveMeterSettings (sINIFile, oSettings.aMeters[i]);
+	}
+
+	// Every meter has its own update interval now, the shared one of version 3.0 is no longer used
+	if (nError == ERROR_SUCCESS)
+	{
+		WritePrivateProfileString (INI_GENERAL_SECTION, INI_VALUE_UPDATE_INTERVAL, NULL, sINIFile);
 	}
 
 	// Remove what is no longer there: meters that were deleted, and the sections of the older versions (they would be read again if the new sections were gone)

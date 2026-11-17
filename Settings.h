@@ -63,6 +63,8 @@
 #define DEFAULT_ICONTYPE			LEDTYPE_FLICKER
 #define DEFAULT_COUNTER_1_PATH		TEXT ("\\PhysicalDisk(_Total)\\% Disk Time")
 #define DEFAULT_UPDATE_INTERVAL_MS	30
+#define PROCESSOR_UPDATE_INTERVAL_MS	100		// Default for processor counters: shorter samples are mostly noise
+#define SLOW_UPDATE_INTERVAL_MS		1000	// Default for network speeds, memory and unknown counters
 #define MIN_UPDATE_INTERVAL_MS		10
 #define MAX_UPDATE_INTERVAL_MS		3600000
 #define MAX_100PERCENT				1e15
@@ -88,7 +90,7 @@
 // INI value names
 #define INI_VALUE_LEDTYPE			TEXT ("LEDType")
 #define INI_VALUE_NAME				TEXT ("Name")
-#define INI_VALUE_UPDATE_INTERVAL	TEXT ("UpdateInterval")
+#define INI_VALUE_UPDATE_INTERVAL	TEXT ("UpdateInterval")			// Per meter. In [General] (3.0) only read, as the interval of meters that have none.
 #define INI_VALUE_SECOND_COUNTER	TEXT ("SecondCounter")				// Older versions. Only read.
 #define INI_VALUE_COLOR_LOW			TEXT ("ColorLow")
 #define INI_VALUE_COLOR_MID			TEXT ("ColorMid")
@@ -117,6 +119,7 @@ struct CounterSettings
 	BOOL		bInvert;			// Use the 100% value minus the counter value
 	int			nAlertPercent;		// Warn when the value is above this % of the scale (the value that fills the icon), 0 = no warning
 	int			nAlertSeconds;		// ... for at least this many seconds
+	DWORD		nUpdateInterval;	// ms between two readings of this counter
 };
 
 // One meter: a counter shown as a tray icon
@@ -134,13 +137,12 @@ struct MeterSettings
 // All settings
 struct DiskLEDSettings
 {
-	DWORD					nUpdateInterval;	// ms, for all meters
 	std::vector<MeterSettings>	aMeters;		// At least one, sorted by nId
 };
 
 void	SetDefaultCounterSettings (CounterSettings& oCounter);
 
-// Sensible value format, scale mode and 100% value for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
+// Sensible value format, scale mode, 100% value and update interval for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
 void	GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter);
 void	SetDefaultMeterSettings (MeterSettings& oMeter, int nId);
 void	SetDefaultSettings (DiskLEDSettings& oSettings);

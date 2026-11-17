@@ -16,6 +16,10 @@
 #define	SAMPLE_OK					0
 #define	SAMPLE_UNUSABLE				1		// Invalid for now, e.g. right after (re)connecting. A persistent problem is detected with GetBadSamples.
 #define	SAMPLE_ERROR				2		// PDH reported an error: the query is stale
+#define	SAMPLE_NOT_DUE				3		// The meter's update interval has not passed yet, nothing was read
+
+// A meter whose next reading is at most this far away is read now: timers do not fire exactly on time
+#define	SAMPLE_SLACK_MS				8
 
 
 // Runtime state of one performance counter
@@ -34,12 +38,13 @@ struct CounterRuntime
 };
 
 
-// A meter: one performance counter shown as one tray icon, with its own scale, alert and error state.
-// The PDH query is shared and owned by the main window, the meter only adds its counter to it.
+// A meter: one performance counter shown as one tray icon, with its own scale, alert, error state and update interval.
+// The PDH query is shared and owned by the main window, the meter only adds its counter to it. The query is collected as often as the
+// fastest meter needs; every meter computes its value from its own previous raw sample, so it covers the meter's whole interval.
 class CMeter
 {
 public:
-	CMeter (CWnd* pOwner, const MeterSettings& oSettings, DWORD nUpdateInterval);
+	CMeter (CWnd* pOwner, const MeterSettings& oSettings);
 	~CMeter ();
 
 	// The tray icon. Create does not fail when the shell is not ready yet, the icon is added later.
@@ -51,9 +56,9 @@ public:
 	const MeterSettings&	GetSettings () const	{ return m_oSettings; }
 
 	// New settings: the history starts again. A learned maximum is kept if the counter is the same.
-	void	SetSettings (const MeterSettings& oSettings, DWORD nUpdateInterval);
+	void	SetSettings (const MeterSettings& oSettings);
 
-	// New settings for the same counter (the look, scale, alerts, name): the history and what was learned are kept
+	// New settings for the same counter (the look, scale, alerts, name, interval): the history and what was learned are kept
 	void	UpdateSettings (const MeterSettings& oSettings);
 
 	// The counter in the shared query. Connect returns a PDH error, with the reason in sError.
@@ -61,14 +66,18 @@ public:
 	void	Disconnect ();
 	BOOL	IsConnected () const	{ return m_hCounter != NULL; }
 
-	// Read the counter, update scale and alert. Returns SAMPLE_*, for SAMPLE_ERROR the PDH error is in nPdhError.
-	int		Update (DWORD nTick, DWORD nUpdateInterval, DWORD& nPdhError);
+	// Ticks until the next reading is due (0 = due now)
+	DWORD	GetTimeToNextSample (DWORD nTick) const;
+
+	// After the query was collected: read the counter if it is due, update scale and alert.
+	// Returns SAMPLE_*, for SAMPLE_ERROR the PDH error is in nPdhError. The first call after connecting only remembers the raw value.
+	int		Update (DWORD nTick, DWORD& nPdhError);
 	double	GetValue () const		{ return m_oIcon.dValue; }
 	int		GetBadSamples () const	{ return m_nBadSamples; }
-	void	ResetSampling ()		{ m_nBadSamples = 0; m_oRuntime.nLastTick = 0; }
+	void	ResetSampling ()		{ m_nBadSamples = 0; m_oRuntime.nLastTick = 0; m_bHaveRaw = FALSE; }
 
 	void	UpdateIcon ();
-	void	UpdateTooltip ();
+	void	UpdateTooltip (DWORD nTick);
 	void	SetInitialTooltip ();
 
 	// Error state: an error icon, the problem as tooltip and (once) as balloon
@@ -91,6 +100,10 @@ private:
 	CounterRuntime	m_oRuntime;
 	IconCounter		m_oIcon;
 	PDH_HCOUNTER	m_hCounter;
+	PDH_RAW_COUNTER	m_oRawPrevious;		// The raw value of the previous reading, the value is computed from it and the current one
+	BOOL			m_bHaveRaw;			// m_oRawPrevious is valid
+	DWORD			m_nNextSampleTick;	// Tick count when the next reading is due
+	DWORD			m_nTooltipTick;		// Tick count of the last tooltip update, 0 = update with the next reading
 	int				m_nBadSamples;		// Consecutive samples that could not be used
 	BOOL			m_bError;
 	BOOL			m_bErrorShown;		// The error was already reported with a balloon
@@ -99,6 +112,7 @@ private:
 	void	UpdateCeiling ();
 	CString	GetName () const;
 	CString	GetTooltipPrefix () const;
+	CString	GetUniqueTooltip () const;
 	CString	GetCounterLabel () const;
 	CString	GetTooltip () const;
 	void	SetTrayIcon (HICON hNew);

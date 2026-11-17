@@ -52,8 +52,6 @@ CMainFrame::CMainFrame()
 {
 	m_TimerID				= 0;
 	m_hQuery				= NULL;
-	m_nUpdateInterval		= DEFAULT_UPDATE_INTERVAL_MS;
-	m_nLastTooltipTick		= 0;
 	m_bPdhError				= FALSE;
 	m_nRetryTick			= 0;
 	m_nMeterRetryTick		= GetTickCount ();
@@ -105,25 +103,55 @@ int CMainFrame::OnCreate (LPCREATESTRUCT lpCreateStruct)
 	return 0;
 }
 
+// Start the timer: the meters are read (or start with their first raw value) right away
 DWORD CMainFrame::StartTimer ()
 {
-    // Check if it's already going
-	if (m_TimerID) 
-	{
-		// Re-initialize the timer
-        KillTimer (m_TimerID);
-		m_TimerID	= 0;
-	}
+	DWORD	nError	= ScheduleTimer (MIN_UPDATE_INTERVAL_MS);
 
-	m_TimerID	= SetTimer (ID_TIMER, m_nUpdateInterval, (TIMERPROC) NULL);
-
-    if (! m_TimerID)
+	if (nError != ERROR_SUCCESS)
 	{
 		ShowMessage (this, TEXT ("Unable to set timer!"), PROGRAM_NAME, MB_OK | MB_ICONERROR);
-		return ERROR_INVALID_FUNCTION;
 	}
 
-	return ERROR_SUCCESS;
+	return nError;
+}
+
+// Set the timer to fire once after nDelay ms. Setting it again replaces the previous time.
+DWORD CMainFrame::ScheduleTimer (DWORD nDelay)
+{
+	m_TimerID	= SetTimer (ID_TIMER, nDelay, (TIMERPROC) NULL);
+
+	return m_TimerID ? ERROR_SUCCESS : ERROR_INVALID_FUNCTION;
+}
+
+// The timer fires when the next meter is due, and at least every TIMER_MAX_WAIT_MS
+void CMainFrame::ScheduleNextSample ()
+{
+	DWORD	nTick	= GetTickCount ();
+	DWORD	nDelay	= TIMER_MAX_WAIT_MS;
+
+	if (m_hQuery)
+	{
+		for (size_t i = 0; i < m_aMeters.size (); i++)
+		{
+			if (m_aMeters[i]->IsConnected ())
+			{
+				DWORD	nLeft	= m_aMeters[i]->GetTimeToNextSample (nTick);
+
+				if (nLeft < nDelay)
+				{
+					nDelay	= nLeft;
+				}
+			}
+		}
+	}
+	if (nDelay < MIN_UPDATE_INTERVAL_MS)
+	{
+		nDelay	= MIN_UPDATE_INTERVAL_MS;
+	}
+
+	// If this fails, the old timer is still there: it fires again (too early or too late), which tries again
+	ScheduleTimer (nDelay);
 }
 
 
@@ -442,7 +470,6 @@ void CMainFrame::ClearErrorState ()
 {
 	m_bPdhError			= FALSE;
 	m_nZeroSince		= 0;
-	m_nLastTooltipTick	= 0;
 }
 
 
@@ -563,14 +590,25 @@ void CMainFrame::HandlePdhError (const CString& sCaller, DWORD nError)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//	Timer: read the counters and update icons and tooltips
+//	Timer: read the meters that are due, update icons and tooltips, and set the timer to the next meter that is due
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 void CMainFrame::OnTimer (UINT_PTR nIDEvent) 
 {
+	if (nIDEvent == ID_TIMER)
+	{
+		Sample (GetTickCount ());
+		ScheduleNextSample ();
+	}
+
+	// Call the parent class's function
+	CFrameWnd::OnTimer (nIDEvent);
+}
+
+void CMainFrame::Sample (DWORD nTick)
+{
 	PDH_STATUS	nError	= ERROR_INVALID_FUNCTION;
-	DWORD		nTick	= GetTickCount ();
 
 	if (m_hQuery == NULL)
 	{
@@ -586,92 +624,99 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 		return;
 	}
 
-	// Get current data
-	nError	= PdhCollectQueryData (m_hQuery);
-	if (nError != ERROR_SUCCESS)
+	// The query is only collected when a meter needs a new value
+	BOOL	bDue	= FALSE;
+
+	for (size_t i = 0; i < m_aMeters.size () && !bDue; i++)
 	{
-		HandlePdhError (TEXT ("PdhCollectQueryData"), nError);
-		return;
+		bDue	= (m_aMeters[i]->IsConnected () && m_aMeters[i]->GetTimeToNextSample (nTick) == 0);
 	}
 
-	BOOL	bAnySample	= FALSE;
-	BOOL	bAllZero	= TRUE;
-	BOOL	bStale		= FALSE;
-
-	for (size_t i = 0; i < m_aMeters.size (); i++)
+	if (bDue)
 	{
-		CMeter*	pMeter	= m_aMeters[i];
-		DWORD	nPdhError	= ERROR_SUCCESS;
-
-		if (!pMeter->IsConnected ())
+		nError	= PdhCollectQueryData (m_hQuery);
+		if (nError != ERROR_SUCCESS)
 		{
-			continue;
-		}
-
-		int		nResult	= pMeter->Update (nTick, m_nUpdateInterval, nPdhError);
-
-		if (nResult == SAMPLE_ERROR)
-		{
-			HandlePdhError (TEXT ("PdhGetFormattedCounterValue"), nPdhError);
+			HandlePdhError (TEXT ("PdhCollectQueryData"), nError);
 			return;
 		}
-		if (nResult == SAMPLE_OK)
+
+		BOOL	bAnySample	= FALSE;
+		BOOL	bStale		= FALSE;
+
+		for (size_t i = 0; i < m_aMeters.size (); i++)
 		{
-			bAnySample	= TRUE;
-			if (pMeter->GetValue () > 0)
+			CMeter*	pMeter		= m_aMeters[i];
+			DWORD	nPdhError	= ERROR_SUCCESS;
+
+			if (!pMeter->IsConnected ())
 			{
-				bAllZero	= FALSE;
+				continue;
 			}
-		}
-		else if (pMeter->GetBadSamples () >= BAD_SAMPLES_MAX)
-		{
-			// A persistent problem means the query is stale
-			bStale	= TRUE;
-		}
-	}
 
-	// Not more often than the retry time, a counter that cannot recover must not keep the query busy
-	if (bStale && nTick - m_nReconnectTick >= PDH_RETRY_MS)
-	{
-		Reconnect ();
-		return;
-	}
+			int		nResult	= pMeter->Update (nTick, nPdhError);
 
-	// Counters that read zero for a long time may be stale: open a new query
-	if (bAnySample)
-	{
-		if (!bAllZero)
-		{
-			m_nZeroSince	= 0;
-		}
-		else if (m_nZeroSince == 0)
-		{
-			m_nZeroSince	= nTick;
-		}
-		else if (nTick - m_nZeroSince >= STALE_ZERO_MS)
-		{
-			Reconnect ();
-			if (m_hQuery == NULL)
+			if (nResult == SAMPLE_ERROR)
 			{
+				HandlePdhError (TEXT ("PdhGetRawCounterValue"), nPdhError);
 				return;
 			}
+			if (nResult == SAMPLE_OK)
+			{
+				bAnySample	= TRUE;
+			}
+			else if (nResult == SAMPLE_UNUSABLE && pMeter->GetBadSamples () >= BAD_SAMPLES_MAX)
+			{
+				// A persistent problem means the query is stale
+				bStale	= TRUE;
+			}
+		}
+
+		// Not more often than the retry time, a counter that cannot recover must not keep the query busy
+		if (bStale && nTick - m_nReconnectTick >= PDH_RETRY_MS)
+		{
+			Reconnect ();
+			return;
+		}
+
+		// Counters that all read zero for a long time may be stale: open a new query. Meters read at different times, their last values count.
+		if (bAnySample)
+		{
+			BOOL	bAllZero	= TRUE;
+
+			for (size_t i = 0; i < m_aMeters.size () && bAllZero; i++)
+			{
+				if (m_aMeters[i]->IsConnected () && m_aMeters[i]->GetValue () > 0)
+				{
+					bAllZero	= FALSE;
+				}
+			}
+
+			if (!bAllZero)
+			{
+				m_nZeroSince	= 0;
+			}
+			else if (m_nZeroSince == 0)
+			{
+				m_nZeroSince	= nTick;
+			}
+			else if (nTick - m_nZeroSince >= STALE_ZERO_MS)
+			{
+				Reconnect ();
+				if (m_hQuery == NULL)
+				{
+					return;
+				}
+			}
 		}
 	}
 
-	// Update the icons and tooltips. Icons are only redrawn when what they show changes, the tooltips are throttled (the shell does not need to be updated on every tick).
-	BOOL	bTooltips	= (nTick - m_nLastTooltipTick >= TOOLTIP_UPDATE_MS);
-
-	if (bTooltips)
-	{
-		m_nLastTooltipTick	= nTick;
-	}
-	UpdateMeters (bTooltips);
+	// Icons are only redrawn when what they show changes, the tooltips are throttled (the shell does not need to be updated on every reading).
+	// Updating also re-adds a tray icon that the shell lost.
+	UpdateMeters (nTick);
 
 	SaveLearnedMax (FALSE);
 	RetryFailedMeters ();
-
-	// Call the parent class's function
-	CFrameWnd::OnTimer (nIDEvent);
 }
 
 
@@ -681,7 +726,7 @@ void CMainFrame::OnTimer (UINT_PTR nIDEvent)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void CMainFrame::UpdateMeters (BOOL bTooltips)
+void CMainFrame::UpdateMeters (DWORD nTick)
 {
 	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
@@ -693,10 +738,7 @@ void CMainFrame::UpdateMeters (BOOL bTooltips)
 		}
 
 		pMeter->UpdateIcon ();
-		if (bTooltips)
-		{
-			pMeter->UpdateTooltip ();
-		}
+		pMeter->UpdateTooltip (nTick);
 	}
 }
 
@@ -747,7 +789,6 @@ DWORD CMainFrame::Initialize (const DiskLEDSettings& oSettings, BOOL bSilent)
 	DiskLEDSettings	oNormalized	= oSettings;
 
 	NormalizeSettings (oNormalized);
-	m_nUpdateInterval	= oNormalized.nUpdateInterval;
 
 	// The query is opened again below, all counters are added again
 	ClosePDH ();
@@ -765,14 +806,14 @@ DWORD CMainFrame::Initialize (const DiskLEDSettings& oSettings, BOOL bSilent)
 			{
 				pMeter			= m_aMeters[j];
 				m_aMeters[j]	= NULL;
-				pMeter->SetSettings (oMeter, m_nUpdateInterval);
+				pMeter->SetSettings (oMeter);
 				pMeter->ClearError ();
 			}
 		}
 
 		if (pMeter == NULL)
 		{
-			pMeter	= new CMeter (this, oMeter, m_nUpdateInterval);
+			pMeter	= new CMeter (this, oMeter);
 			pMeter->Create ();
 		}
 		aMeters.push_back (pMeter);
@@ -823,7 +864,6 @@ DWORD CMainFrame::Initialize (const DiskLEDSettings& oSettings, BOOL bSilent)
 
 void CMainFrame::GetSettings (DiskLEDSettings& oSettings)
 {
-	oSettings.nUpdateInterval	= m_nUpdateInterval;
 	oSettings.aMeters.clear ();
 	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
@@ -863,16 +903,15 @@ DWORD CMainFrame::ApplySettings (const DiskLEDSettings& oSettings)
 		return Initialize (oNormalized, TRUE);
 	}
 
-	BOOL	bNewInterval	= (m_nUpdateInterval != oNormalized.nUpdateInterval);
-
-	m_nUpdateInterval	= oNormalized.nUpdateInterval;
 	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
 		m_aMeters[i]->UpdateSettings (oNormalized.aMeters[i]);
 	}
-	if (bNewInterval)
+
+	// A changed update interval applies right away
+	if (m_hQuery)
 	{
-		return StartTimer ();
+		ScheduleNextSample ();
 	}
 
 	return ERROR_SUCCESS;

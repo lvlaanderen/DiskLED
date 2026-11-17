@@ -1,10 +1,10 @@
 # Builds the DiskLED release packages in dist\ : the x64 and x86 programs, a zip of each (portable use) and, when Inno Setup 6 is
 # installed, a setup program of each. Nothing is published, tagged or pushed.
 #
-#   powershell -ExecutionPolicy Bypass -File installer\Build-Release.ps1 -Version 3.0
+#   powershell -ExecutionPolicy Bypass -File installer\Build-Release.ps1 -Version 3.1
 
 param (
-	[string]$Version = '3.0',
+	[string]$Version = '3.1',
 	[string]$PlatformToolset = 'v143'
 )
 
