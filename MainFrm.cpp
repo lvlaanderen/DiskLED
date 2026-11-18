@@ -624,21 +624,32 @@ void CMainFrame::Sample (DWORD nTick)
 		return;
 	}
 
-	// The query is only collected when a meter needs a new value
-	BOOL	bDue	= FALSE;
+	// The query is only collected when a meter that uses it needs a new value. Meters that do not use it (graphics adapter temperatures) are read on their own.
+	BOOL	bDue		= FALSE;
+	BOOL	bPdhDue		= FALSE;
 
-	for (size_t i = 0; i < m_aMeters.size () && !bDue; i++)
+	for (size_t i = 0; i < m_aMeters.size (); i++)
 	{
-		bDue	= (m_aMeters[i]->IsConnected () && m_aMeters[i]->GetTimeToNextSample (nTick) == 0);
+		if (m_aMeters[i]->IsConnected () && m_aMeters[i]->GetTimeToNextSample (nTick) == 0)
+		{
+			bDue	= TRUE;
+			if (m_aMeters[i]->UsesPdh ())
+			{
+				bPdhDue	= TRUE;
+			}
+		}
 	}
 
 	if (bDue)
 	{
-		nError	= PdhCollectQueryData (m_hQuery);
-		if (nError != ERROR_SUCCESS)
+		if (bPdhDue)
 		{
-			HandlePdhError (TEXT ("PdhCollectQueryData"), nError);
-			return;
+			nError	= PdhCollectQueryData (m_hQuery);
+			if (nError != ERROR_SUCCESS)
+			{
+				HandlePdhError (TEXT ("PdhCollectQueryData"), nError);
+				return;
+			}
 		}
 
 		BOOL	bAnySample	= FALSE;
@@ -660,6 +671,11 @@ void CMainFrame::Sample (DWORD nTick)
 			{
 				HandlePdhError (TEXT ("PdhGetRawCounterValue"), nPdhError);
 				return;
+			}
+			if (!pMeter->UsesPdh ())
+			{
+				// Nothing about the query can be learned from them
+				continue;
 			}
 			if (nResult == SAMPLE_OK)
 			{
@@ -686,7 +702,7 @@ void CMainFrame::Sample (DWORD nTick)
 
 			for (size_t i = 0; i < m_aMeters.size () && bAllZero; i++)
 			{
-				if (m_aMeters[i]->IsConnected () && m_aMeters[i]->GetValue () > 0)
+				if (m_aMeters[i]->UsesPdh () && m_aMeters[i]->IsConnected () && m_aMeters[i]->GetValue () > 0)
 				{
 					bAllZero	= FALSE;
 				}

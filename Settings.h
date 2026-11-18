@@ -22,11 +22,15 @@
 #define	VALUEFORMAT_BYTES			3		// Raw value is bytes/s, e.g. "1.2 MB/s"
 #define	VALUEFORMAT_BITS			4		// Raw value is bytes/s, shown as bits/s, e.g. "9.6 Mbit/s"
 #define	VALUEFORMAT_MBYTES			5		// Raw value is megabytes, e.g. "34.5 GB / 64.0 GB"
+#define	VALUEFORMAT_CELSIUS			6		// Temperature: the value (after the conversion of the counter) is in degrees Celsius, e.g. "47.6 C"
+#define	VALUEFORMAT_FAHRENHEIT		7		// The same temperature shown in degrees Fahrenheit, e.g. "117.7 F". Values, scale and alerts stay in Celsius internally.
 #define	VALUEFORMAT_PERCENT_TEXT	TEXT ("Percent")
 #define	VALUEFORMAT_NUMBER_TEXT		TEXT ("Number")
 #define	VALUEFORMAT_BYTES_TEXT		TEXT ("Bytes")
 #define	VALUEFORMAT_BITS_TEXT		TEXT ("Bits")
 #define	VALUEFORMAT_MBYTES_TEXT		TEXT ("MBytes")
+#define	VALUEFORMAT_CELSIUS_TEXT	TEXT ("Celsius")
+#define	VALUEFORMAT_FAHRENHEIT_TEXT	TEXT ("Fahrenheit")
 
 // Scale mode constants: what corresponds to the full icon
 #define	SCALEMODE_FIXED				1		// The 100% value
@@ -144,6 +148,12 @@ void	SetDefaultCounterSettings (CounterSettings& oCounter);
 
 // Sensible value format, scale mode, 100% value and update interval for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
 void	GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter);
+
+// Fahrenheit for regions that use the US measurement system, Celsius elsewhere
+DWORD	GetDefaultTemperatureFormat ();
+
+// Is this a temperature value format?
+inline BOOL	IsTemperatureFormat (DWORD nValueFormat)	{ return nValueFormat == VALUEFORMAT_CELSIUS || nValueFormat == VALUEFORMAT_FAHRENHEIT; }
 void	SetDefaultMeterSettings (MeterSettings& oMeter, int nId);
 void	SetDefaultSettings (DiskLEDSettings& oSettings);
 

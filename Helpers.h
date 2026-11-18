@@ -25,6 +25,12 @@ CString	EnglishPathToLocal (const CString& sPath);
 // Is this a valid counter path when read as an English path?
 BOOL	IsValidEnglishCounterPath (const CString& sPath);
 
+// Counters that are not in degrees Celsius: value * dFactor + dOffset gives Celsius. FALSE (factor 1, offset 0) for all other counters.
+BOOL	GetCelsiusConversion (const CString& sPath, double& dFactor, double& dOffset);
+
+// The current temperature of a thermal zone (an instance of "Thermal Zone Information"). FALSE if the zone has no sensor.
+BOOL	GetThermalZoneCelsius (const CString& sInstance, double& dCelsius);
+
 // The instances of a performance object (an English object name, e.g. "Network Interface"), as the counters know them
 void	GetPerfInstances (const CString& sEnglishObject, CStringArray& asInstances);
 

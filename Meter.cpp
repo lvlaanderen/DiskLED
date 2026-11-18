@@ -6,6 +6,7 @@
 #include "MainFrm.h"
 #include "Meter.h"
 #include "Helpers.h"
+#include "GpuSensor.h"
 #include <math.h>
 
 
@@ -24,6 +25,10 @@ CMeter::CMeter (CWnd* pOwner, const MeterSettings& oSettings)
 	m_nIconKey		= ICONKEY_NONE;
 	m_hCounter		= NULL;
 	m_bHaveRaw		= FALSE;
+	m_dFactor		= 1;
+	m_dOffset		= 0;
+	m_bGpu			= FALSE;
+	m_bGpuConnected	= FALSE;
 	m_nNextSampleTick	= 0;
 	m_nTooltipTick	= 0;
 	m_nBadSamples	= 0;
@@ -121,8 +126,26 @@ void CMeter::SetSettings (const MeterSettings& oSettings)
 	}
 
 	MakeIconStyle (m_oSettings, m_oStyle);
+	UpdateSource ();
 	ResetState ();
 	m_nIconKey	= ICONKEY_NONE;
+}
+
+// Where the value comes from: a graphics adapter, or a performance counter. Temperature counters are in Kelvin, the meter works in Celsius.
+void CMeter::UpdateSource ()
+{
+	m_bGpu	= IsGpuPath (m_oSettings.oCounter.sPath, &m_sGpuAdapter);
+	if (!m_bGpu)
+	{
+		m_sGpuAdapter.Empty ();
+		m_bGpuConnected	= FALSE;
+	}
+
+	if (!IsTemperatureFormat (m_oSettings.oCounter.nValueFormat) || !GetCelsiusConversion (m_oSettings.oCounter.sPath, m_dFactor, m_dOffset))
+	{
+		m_dFactor	= 1;
+		m_dOffset	= 0;
+	}
 }
 
 void CMeter::ResetState ()
@@ -153,6 +176,7 @@ void CMeter::UpdateSettings (const MeterSettings& oSettings)
 	m_oSettings.oCounter.dLearnedMax	= dLearned;
 
 	MakeIconStyle (m_oSettings, m_oStyle);
+	UpdateSource ();
 	m_oIcon.nValueFormat	= m_oSettings.oCounter.nValueFormat;
 	UpdateCeiling ();
 
@@ -192,8 +216,24 @@ DWORD CMeter::Connect (PDH_HQUERY hQuery, CString& sError)
 {
 	const CString&	sPath	= m_oSettings.oCounter.sPath;
 
-	m_hCounter	= NULL;
-	m_bHaveRaw	= FALSE;
+	m_hCounter			= NULL;
+	m_bHaveRaw			= FALSE;
+	m_bGpuConnected		= FALSE;
+
+	// A graphics adapter temperature is read directly, it is not in the query
+	if (m_bGpu)
+	{
+		double	dCelsius	= 0;
+
+		if (!ReadGpuTemperature (m_sGpuAdapter, dCelsius))
+		{
+			sError.Format (TEXT ("The temperature of the graphics adapter %s cannot be read"), (LPCTSTR) m_sGpuAdapter);
+			return ERROR_DEVICE_NOT_AVAILABLE;
+		}
+		m_bGpuConnected	= TRUE;
+
+		return ERROR_SUCCESS;
+	}
 
 	// Prefer the English path, which works on any system language. Older INI files contain paths in the system language.
 	PDH_STATUS	nError	= PdhAddEnglishCounter (hQuery, sPath, 0, &m_hCounter);
@@ -221,8 +261,9 @@ DWORD CMeter::Connect (PDH_HQUERY hQuery, CString& sError)
 // The query was closed, which also frees the counter
 void CMeter::Disconnect ()
 {
-	m_hCounter	= NULL;
-	m_bHaveRaw	= FALSE;
+	m_hCounter			= NULL;
+	m_bHaveRaw			= FALSE;
+	m_bGpuConnected		= FALSE;
 }
 
 
@@ -475,6 +516,28 @@ int CMeter::Update (DWORD nTick, DWORD& nPdhError)
 	}
 
 	SecureZeroMemory (&oRaw, sizeof (oRaw));
+
+	// A graphics adapter is read directly. A reading that fails is ignored for a while, the adapter may be waking up. A persistent failure is an error.
+	if (m_bGpu)
+	{
+		double	dCelsius	= 0;
+
+		if (!ReadGpuTemperature (m_sGpuAdapter, dCelsius))
+		{
+			m_nBadSamples++;
+			if (m_nBadSamples >= BAD_SAMPLES_MAX)
+			{
+				m_bGpuConnected	= FALSE;
+				ShowError (TEXT ("The temperature of the graphics adapter ") + m_sGpuAdapter + TEXT (" cannot be read"), TRUE);
+			}
+			return SAMPLE_UNUSABLE;
+		}
+		m_nBadSamples	= 0;
+		m_bHaveRaw		= TRUE;
+
+		return ApplyValue (dCelsius, nTick);
+	}
+
 	nPdhError	= PdhGetRawCounterValue (m_hCounter, NULL, &oRaw);
 	if (nPdhError != ERROR_SUCCESS)
 	{
@@ -518,7 +581,21 @@ int CMeter::Update (DWORD nTick, DWORD& nPdhError)
 
 	m_nBadSamples	= 0;
 
-	double	dValue	= oValue.doubleValue;
+	return ApplyValue (oValue.doubleValue * m_dFactor + m_dOffset, nTick);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	A new value: remember it, update the scale and the alert
+//
+////////////////////////////////////////////////////////////////////////////////
+
+int CMeter::ApplyValue (double dValue, DWORD nTick)
+{
+	const CounterSettings&	oCounter	= m_oSettings.oCounter;
+	DWORD					nInterval	= oCounter.nUpdateInterval;
+
 	if (oCounter.bInvert)
 	{
 		dValue	= oCounter.d100Percent - dValue;

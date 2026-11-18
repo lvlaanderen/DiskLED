@@ -624,6 +624,8 @@ BOOL CDialogConfig::OnInitDialog ()
 	m_cValueFormat.AddString (TEXT ("Bytes/s"));
 	m_cValueFormat.AddString (TEXT ("Bits/s"));
 	m_cValueFormat.AddString (TEXT ("MBytes"));
+	m_cValueFormat.AddString (TEXT ("Temperature (\u00B0C)"));
+	m_cValueFormat.AddString (TEXT ("Temperature (\u00B0F)"));
 
 	// Scale mode entries, in the order of the SCALEMODE_* constants
 	m_cScaleMode.AddString (TEXT ("Fixed"));

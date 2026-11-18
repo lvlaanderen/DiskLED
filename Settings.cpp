@@ -32,6 +32,8 @@ static const NameValue g_aValueFormats[] =
 	{ VALUEFORMAT_BYTES_TEXT,	VALUEFORMAT_BYTES },
 	{ VALUEFORMAT_BITS_TEXT,	VALUEFORMAT_BITS },
 	{ VALUEFORMAT_MBYTES_TEXT,	VALUEFORMAT_MBYTES },
+	{ VALUEFORMAT_CELSIUS_TEXT,	VALUEFORMAT_CELSIUS },
+	{ VALUEFORMAT_FAHRENHEIT_TEXT,	VALUEFORMAT_FAHRENHEIT },
 	{ NULL,						0 }
 };
 
@@ -128,6 +130,19 @@ void SetDefaultCounterSettings (CounterSettings& oCounter)
 }
 
 
+DWORD GetDefaultTemperatureFormat ()
+{
+	DWORD	nMeasure	= 0;
+
+	if (GetLocaleInfoEx (LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE | LOCALE_RETURN_NUMBER, (LPWSTR) &nMeasure, sizeof (nMeasure) / sizeof (WCHAR)) > 0 && nMeasure == 1)
+	{
+		return VALUEFORMAT_FAHRENHEIT;
+	}
+
+	return VALUEFORMAT_CELSIUS;
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 //	Sensible value format, scale mode and 100% value for a counter, so users do not have to know them
@@ -167,7 +182,14 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 		oCounter.nUpdateInterval	= PROCESSOR_UPDATE_INTERVAL_MS;
 	}
 
-	if (sCounter.Find (TEXT ("%")) >= 0)
+	if ((sObject == TEXT ("thermal zone information") && sCounter.Find (TEXT ("temperature")) >= 0) || sObject == TEXT ("diskled gpu"))
+	{
+		// Temperatures are kept in Celsius, in the format of the user's region. A full icon is 100 degrees Celsius. The firmware updates them slowly.
+		oCounter.nValueFormat	= GetDefaultTemperatureFormat ();
+		oCounter.nScaleMode		= SCALEMODE_FIXED;
+		oCounter.d100Percent	= 100;
+	}
+	else if (sCounter.Find (TEXT ("%")) >= 0)
 	{
 		// Percentages: 100 is a full icon
 		oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
@@ -297,7 +319,7 @@ void NormalizeMeterSettings (MeterSettings& oMeter)
 	{
 		oCounter.d100Percent	= DEFAULT_100PERCENT;
 	}
-	if (oCounter.nValueFormat < VALUEFORMAT_PERCENT || oCounter.nValueFormat > VALUEFORMAT_MBYTES)
+	if (oCounter.nValueFormat < VALUEFORMAT_PERCENT || oCounter.nValueFormat > VALUEFORMAT_FAHRENHEIT)
 	{
 		oCounter.nValueFormat	= VALUEFORMAT_PERCENT;
 	}

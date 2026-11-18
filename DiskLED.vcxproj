@@ -245,6 +245,7 @@
     <ClCompile Include="DiskLED.cpp" />
     <ClCompile Include="Helpers.cpp" />
     <ClCompile Include="IconRenderer.cpp" />
+    <ClCompile Include="GpuSensor.cpp" />
     <ClCompile Include="Meter.cpp" />
     <ClCompile Include="MainFrm.cpp" />
     <ClCompile Include="Settings.cpp" />
@@ -266,6 +267,7 @@
     <ClInclude Include="DiskLED.h" />
     <ClInclude Include="Helpers.h" />
     <ClInclude Include="IconRenderer.h" />
+    <ClInclude Include="GpuSensor.h" />
     <ClInclude Include="Meter.h" />
     <ClInclude Include="MainFrm.h" />
     <ClInclude Include="Settings.h" />

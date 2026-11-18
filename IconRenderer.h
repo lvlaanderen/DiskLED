@@ -31,7 +31,8 @@ void	GetValueParts (DWORD nValueFormat, double dValue, double dScale, double& dN
 // Format a value for the tooltip. With bShowTotal, megabyte values also show the scale (e.g. "34.5 GB / 64.0 GB").
 CString	FormatValue (DWORD nValueFormat, double dValue, double dScale, BOOL bShowTotal);
 
-// The 100% value as the user sees and enters it, e.g. "350 Mbit/s" for bits/s or "100" for percent. A plain number is always the raw counter value.
+// The 100% value as the user sees and enters it, e.g. "350 Mbit/s" for bits/s or "100" for percent. A plain number is always the raw counter value,
+// except for temperatures (kept in Celsius), where it is in the unit of the value format, e.g. "212 F".
 CString	FormatScaleValue (DWORD nValueFormat, double dValue);
 BOOL	ParseScaleValue (DWORD nValueFormat, const CString& sText, double& dValue);
 
