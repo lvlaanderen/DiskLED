@@ -16,7 +16,7 @@ Both versions are licensed under the Apache License 2.0, see `LICENSE`.
 
 ## Settings
 
-Everything below can be set in the settings window (double-click a tray icon, or start DiskLED again). **Add meter** starts a wizard in three steps: what to monitor (internet download or upload speed, disk activity, processor use, memory, or any other counter), which network adapter, disk or processor, and how it should look, with a preview. A meter can have a name, which is shown in its tooltip and in its warnings.
+Everything below can be set in the settings window (double-click a tray icon, or start DiskLED again). **Add meter** starts a wizard in three steps: what to monitor (internet download or upload speed, disk activity, processor use, memory, computer or graphics card temperature, or any other counter), which network adapter, disk, processor, sensor or graphics card, and how it should look, with a preview. A meter can have a name, which is shown in its tooltip and in its warnings.
 
 The meters are listed on the left. The settings of the selected meter are on the right, on four tabs (data source, scale and values, appearance, alerts), with a live preview of the icon, animated with a test signal. **Quick pick** on the first tab sets up common data sources in one step. Choosing a counter fills in the value format, the scale and the 100% value for you. You can change all of them, and the 100% field accepts units such as `350 Mbit/s`. The window follows the Windows app theme (dark or light).
 
@@ -39,9 +39,9 @@ The file can be edited by hand while DiskLED is not running. Every meter has a s
 - `LEDType`: the icon type, see below.
 - `ColorLow`, `ColorMid`, `ColorHigh`: the colours as `RRGGBB` hex, for example `00DC00`.
 - `ThresholdMid`, `ThresholdHigh`: the percentage of the scale where the mid and the high colour start (defaults 50 and 75). The LED only uses the low colour.
-- `Path`: the counter path. Written in English, so the INI file works on any Windows language. Paths in the system language from older versions still work.
-- `100% Utilization`: the counter value that corresponds to 100%.
-- `ValueFormat`: how values are shown in the tooltip and in the number icon: `Percent` (default), `Number`, `Bytes` (counter is bytes/s, shown as B/s, KB/s, MB/s), `Bits` (bytes/s shown as bit/s, kbit/s, Mbit/s) or `MBytes` (counter is in megabytes, shown as MB/GB/TB; with a fixed scale the tooltip also shows the total).
+- `Path`: the counter path. Written in English, so the INI file works on any Windows language. Paths in the system language from older versions still work. A graphics card temperature uses the path `\DiskLED GPU(<graphics card name>)\Temperature`, see **Temperatures** below.
+- `100% Utilization`: the counter value that corresponds to 100%. For temperatures it is in degrees Celsius.
+- `ValueFormat`: how values are shown in the tooltip and in the number icon: `Percent` (default), `Number`, `Bytes` (counter is bytes/s, shown as B/s, KB/s, MB/s), `Bits` (bytes/s shown as bit/s, kbit/s, Mbit/s), `MBytes` (counter is in megabytes, shown as MB/GB/TB; with a fixed scale the tooltip also shows the total), `Celsius` or `Fahrenheit` (temperatures).
 - `ScaleMode`: what corresponds to the full icon. `Fixed` (default): the 100% value. `Peak`: the highest of the last 16 values. `Decay`: a peak that falls by half every 30 seconds. `Auto`: the highest value seen so far, learned over time and kept in the INI as `LearnedMax`; it falls by half in a day, and for network counters it never exceeds the speed of the adapter. With `Peak`, `Decay` and `Auto` the `100% Utilization` value is the minimum scale. (Older versions used `AutoScale=1`, which is read as `Peak`.)
 - `Invert`: `1` shows the 100% value minus the counter value, for example memory used from `\Memory\Available MBytes`, or disk active time (as in Task Manager) from `\PhysicalDisk(_Total)\% Idle Time`. New disk meters use `% Idle Time` with `Invert=1`: `% Disk Time` is based on the queue length and can go far above 100%. The meter list and tooltip name an inverted counter after what it shows (`% Idle Time` becomes `% Active Time`, `Available MBytes` becomes `Used MBytes`, other counters get "100% minus" in front), and the tooltip shows what it is computed from.
 - `AlertAbove` and `AlertSeconds`: show a notification when the value stays above this percentage of the scale (the value that fills the icon) for this many seconds. `0` turns the warning off. It is shown once per period above the threshold.
@@ -55,7 +55,16 @@ The file can be edited by hand while DiskLED is not running. Every meter has a s
 - `CleanBar`: a plain bar rising from the bottom.
 - `VUMeter`: stacked segments, lit up to the value and coloured by height. Unlit segments are dimmed.
 - `Graph`: the last 16 values as bars, with a dim line at 50%.
-- `Number`: the current value as text with a one-letter unit below it (B/K/M/G for bytes, b/k/m/g for bits, % for percent).
+- `Number`: the current value as text with a one-letter unit below it (B/K/M/G for bytes, b/k/m/g for bits, % for percent, C/F for temperatures).
+
+### Temperatures
+
+DiskLED shows temperatures without extra software or drivers, from the sensors that Windows already knows about:
+
+- **Computer temperature:** the ACPI thermal zones of the computer (`\Thermal Zone Information(<zone>)\Temperature` or `\High Precision Temperature`). Which parts of the computer they measure depends on the manufacturer; often one is near the processor. They are not the temperature of the processor cores, which Windows cannot read without a driver. The wizard lists the zones with their current temperature and leaves out zones without a sensor.
+- **Graphics card temperature:** the temperature that the graphics driver reports to Windows, the same as in Task Manager. Usually only separate graphics cards report one, not the graphics built into the processor. The wizard only lists cards that report a temperature.
+
+Temperatures are shown in Celsius or Fahrenheit (`ValueFormat`); a new meter uses the unit of your region. A full icon is 100 °C, and the 100% field accepts `212 F` or `100 C`. The sensors are read once a second.
 
 ### Tray icons
 

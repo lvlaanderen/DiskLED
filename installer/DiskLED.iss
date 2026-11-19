@@ -1,9 +1,9 @@
 ; Inno Setup script for DiskLED. Build with installer\Build-Release.ps1, or directly:
-;   ISCC.exe /DVersion=3.1 /DArch=x64 installer\DiskLED.iss
+;   ISCC.exe /DVersion=3.2 /DArch=x64 installer\DiskLED.iss
 ; The program is taken from dist\DiskLED-<Version>-<Arch>\DiskLED.exe (made by Build-Release.ps1).
 
 #ifndef Version
-  #define Version "3.1"
+  #define Version "3.2"
 #endif
 #ifndef Arch
   #define Arch "x64"
