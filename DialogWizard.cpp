@@ -466,24 +466,11 @@ void CDialogWizard::AddCopyToImportList (int nCopy, BOOL bSelect)
 	for (size_t i = 0; i < oCopy.oSettings.aMeters.size (); i++)
 	{
 		const MeterSettings&	oMeter		= oCopy.oSettings.aMeters[i];
-		CString					sMachine;
-		CString					sObject;
-		CString					sInstance;
-		CString					sCounter;
-		CString					sPath		= oMeter.oCounter.sPath;
 		CString					sText;
 		BOOL					bDouble		= IsCurrentMeter (oMeter);
 		ImportEntry				oEntry;
 
-		if (!ParsePerfPath (sPath, sMachine, sObject, sInstance, sCounter))
-		{
-			sCounter	= sPath;
-		}
-		sText	= GetOldCopyName (oCopy) + TEXT (":  ") + sCounter;
-		if (!sInstance.IsEmpty ())
-		{
-			sText	+= TEXT (" (") + sInstance + TEXT (")");
-		}
+		sText	= GetOldCopyName (oCopy) + TEXT (":  ") + GetCounterDisplayName (oMeter.oCounter, TRUE);
 		if (bDouble)
 		{
 			sText	+= TEXT ("  - you have this meter already");
@@ -622,7 +609,7 @@ CString CDialogWizard::GetPath () const
 	case WHAT_UPLOAD:
 		return MakePerfPath (TEXT (""), TEXT ("Network Interface"), m_sInstance, TEXT ("Bytes Sent/sec"));
 	case WHAT_DISK:
-		return MakePerfPath (TEXT (""), TEXT ("PhysicalDisk"), m_sInstance, TEXT ("% Disk Time"));
+		return MakePerfPath (TEXT (""), TEXT ("PhysicalDisk"), m_sInstance, TEXT ("% Idle Time"));
 	case WHAT_PROCESSOR:
 		return MakePerfPath (TEXT (""), TEXT ("Processor"), m_sInstance, TEXT ("% Processor Time"));
 	}

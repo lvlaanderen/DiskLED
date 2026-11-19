@@ -107,6 +107,7 @@ private:
 	int				m_nBadSamples;		// Consecutive samples that could not be used
 	BOOL			m_bError;
 	BOOL			m_bErrorShown;		// The error was already reported with a balloon
+	CString			m_sDisplayName;		// The counter name with instance, see GetCounterDisplayName. Kept because the tooltip is updated often.
 
 	void	ResetState ();
 	void	UpdateCeiling ();

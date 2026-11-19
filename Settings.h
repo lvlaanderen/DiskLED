@@ -61,7 +61,9 @@
 
 // Default values
 #define DEFAULT_ICONTYPE			LEDTYPE_FLICKER
-#define DEFAULT_COUNTER_1_PATH		TEXT ("\\PhysicalDisk(_Total)\\% Disk Time")
+// Disk active time like Task Manager: 100% minus the idle time. % Disk Time is based on the queue length and goes far above 100% on SSDs.
+#define DEFAULT_COUNTER_1_PATH		TEXT ("\\PhysicalDisk(_Total)\\% Idle Time")
+#define DEFAULT_COUNTER_1_INVERT	TRUE
 #define DEFAULT_UPDATE_INTERVAL_MS	30
 #define PROCESSOR_UPDATE_INTERVAL_MS	100		// Default for processor counters: shorter samples are mostly noise
 #define SLOW_UPDATE_INTERVAL_MS		1000	// Default for network speeds, memory and unknown counters
@@ -144,6 +146,12 @@ void	SetDefaultCounterSettings (CounterSettings& oCounter);
 
 // Sensible value format, scale mode, 100% value and update interval for a counter (an English path), e.g. 100 for percent counters, the auto scale for network speeds
 void	GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter);
+
+// The counter name for the meter list, tooltips and alerts. Inverted counters are named after what they show (% Idle Time -> % Active Time).
+CString	GetCounterDisplayName (const CounterSettings& oCounter, BOOL bWithInstance);
+
+// "100% minus ", in front of the path of an inverted counter
+CString	GetInvertPrefix (const CounterSettings& oCounter);
 void	SetDefaultMeterSettings (MeterSettings& oMeter, int nId);
 void	SetDefaultSettings (DiskLEDSettings& oSettings);
 

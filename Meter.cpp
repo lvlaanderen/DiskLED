@@ -121,6 +121,7 @@ void CMeter::SetSettings (const MeterSettings& oSettings)
 	}
 
 	MakeIconStyle (m_oSettings, m_oStyle);
+	m_sDisplayName	= GetCounterDisplayName (m_oSettings.oCounter, TRUE);
 	ResetState ();
 	m_nIconKey	= ICONKEY_NONE;
 }
@@ -153,6 +154,7 @@ void CMeter::UpdateSettings (const MeterSettings& oSettings)
 	m_oSettings.oCounter.dLearnedMax	= dLearned;
 
 	MakeIconStyle (m_oSettings, m_oStyle);
+	m_sDisplayName			= GetCounterDisplayName (m_oSettings.oCounter, TRUE);
 	m_oIcon.nValueFormat	= m_oSettings.oCounter.nValueFormat;
 	UpdateCeiling ();
 
@@ -240,15 +242,7 @@ CString CMeter::GetName () const
 
 CString CMeter::GetCounterLabel () const
 {
-	CString	sMachine;
-	CString	sObject;
-	CString	sInstance;
-	CString	sCounter;
-
-	if (!ParsePerfPath (m_oSettings.oCounter.sPath, sMachine, sObject, sInstance, sCounter))
-	{
-		sCounter	= m_oSettings.oCounter.sPath;
-	}
+	CString	sCounter	= GetCounterDisplayName (m_oSettings.oCounter, FALSE);
 
 	// Keep tooltips and balloons within their length limits
 	sCounter.Truncate (48);
@@ -256,18 +250,23 @@ CString CMeter::GetCounterLabel () const
 	return sCounter;
 }
 
-// The current value and the counter path, with the name of the meter if it has one
+// The current value and the counter path, with the name of the meter if it has one. An inverted counter also shows what it is computed from.
 CString CMeter::GetTooltip () const
 {
 	const CounterSettings&	oCounter	= m_oSettings.oCounter;
 	CString					sValue		= FormatValue (oCounter.nValueFormat, m_oIcon.dValue, m_oIcon.dScale, oCounter.nScaleMode == SCALEMODE_FIXED);
+	CString					sPath		= oCounter.bInvert ? GetInvertPrefix (oCounter) + oCounter.sPath : oCounter.sPath;
 
 	if (!m_oSettings.sName.IsEmpty ())
 	{
-		return m_oSettings.sName + TEXT (": ") + sValue + TEXT ("\n") + oCounter.sPath;
+		return m_oSettings.sName + TEXT (": ") + sValue + TEXT ("\n") + sPath;
+	}
+	if (oCounter.bInvert)
+	{
+		return sValue + TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + m_sDisplayName + TEXT ("\n") + sPath;
 	}
 
-	return sValue + TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + oCounter.sPath;
+	return sValue + TEXT ("\n") + PROGRAM_NAME + TEXT (" - ") + sPath;
 }
 
 CString CMeter::GetTooltipPrefix () const

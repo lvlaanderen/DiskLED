@@ -419,7 +419,7 @@ void CDialogConfig::ApplyCounterDefaults ()
 
 	m_nValueFormat		= oCounter.nValueFormat - 1;
 	m_nScaleMode		= oCounter.nScaleMode - 1;
-	m_nInvert			= 0;
+	m_nInvert			= oCounter.bInvert ? 1 : 0;
 	m_d100Percent		= oCounter.d100Percent;
 	m_s100Percent		= FormatScaleValue (oCounter.nValueFormat, oCounter.d100Percent);
 	m_s100PercentShown	= m_s100Percent;
@@ -523,7 +523,7 @@ void CDialogConfig::OnCbnSelchangeQuickPick ()
 		}
 		break;
 	case 3:
-		sPath	= TEXT ("\\PhysicalDisk(_Total)\\% Disk Time");
+		sPath	= DEFAULT_COUNTER_1_PATH;
 		break;
 	case 4:
 		sPath	= TEXT ("\\Processor(_Total)\\% Processor Time");
@@ -1086,20 +1086,7 @@ CString CDialogConfig::GetMeterListText (int nMeter)
 		return sText;
 	}
 
-	CString	sMachine;
-	CString	sObject;
-	CString	sInstance;
-	CString	sCounter;
-
-	if (!ParsePerfPath (oMeter.oCounter.sPath, sMachine, sObject, sInstance, sCounter))
-	{
-		sCounter	= oMeter.oCounter.sPath;
-	}
-	sText.Format (TEXT ("%d: %s"), oMeter.nId, (LPCTSTR) sCounter);
-	if (!sInstance.IsEmpty ())
-	{
-		sText	+= TEXT (" (") + sInstance + TEXT (")");
-	}
+	sText.Format (TEXT ("%d: %s"), oMeter.nId, (LPCTSTR) GetCounterDisplayName (oMeter.oCounter, TRUE));
 
 	return sText;
 }

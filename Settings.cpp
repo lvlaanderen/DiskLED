@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "Settings.h"
 #include "Helpers.h"
+#include "IconRenderer.h"
 #include <float.h>
 #include <math.h>
 
@@ -167,6 +168,12 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 		oCounter.nUpdateInterval	= PROCESSOR_UPDATE_INTERVAL_MS;
 	}
 
+	// A disk's idle time is shown as its active time, like in Task Manager
+	if ((sObject == TEXT ("physicaldisk") || sObject == TEXT ("logicaldisk")) && sCounter == TEXT ("% idle time"))
+	{
+		oCounter.bInvert	= TRUE;
+	}
+
 	if (sCounter.Find (TEXT ("%")) >= 0)
 	{
 		// Percentages: 100 is a full icon
@@ -205,6 +212,81 @@ void GetCounterDefaults (const CString& sEnglishPath, CounterSettings& oCounter)
 	}
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//	The counter as shown in the meter list, tooltips and alerts. An inverted counter is named after what it then shows:
+//	% Idle Time becomes % Active Time (like Task Manager), Available MBytes becomes Used MBytes. Others get "100% minus" in front.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+CString GetInvertPrefix (const CounterSettings& oCounter)
+{
+	CString	sFull	= FormatScaleValue (oCounter.nValueFormat, oCounter.d100Percent);
+
+	if (oCounter.nValueFormat == VALUEFORMAT_PERCENT)
+	{
+		sFull	+= TEXT ("%");
+	}
+
+	return sFull + TEXT (" minus ");
+}
+
+CString GetCounterDisplayName (const CounterSettings& oCounter, BOOL bWithInstance)
+{
+	static const LPCTSTR	aasInverted[][2]	=
+	{
+		{ TEXT ("% Idle Time"),			TEXT ("% Active Time") },
+		{ TEXT ("% Free Space"),		TEXT ("% Used Space") },
+		{ TEXT ("Free Megabytes"),		TEXT ("Used Megabytes") },
+		{ TEXT ("Available Bytes"),		TEXT ("Used Bytes") },
+		{ TEXT ("Available KBytes"),	TEXT ("Used KBytes") },
+		{ TEXT ("Available MBytes"),	TEXT ("Used MBytes") },
+	};
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+	CString	sLabel;
+
+	if (!ParsePerfPath (oCounter.sPath, sMachine, sObject, sInstance, sCounter))
+	{
+		sCounter	= oCounter.sPath;
+	}
+	sLabel	= sCounter;
+
+	if (oCounter.bInvert)
+	{
+		CString	sEnglishMachine;
+		CString	sEnglishObject;
+		CString	sEnglishInstance;
+		CString	sEnglishCounter;
+
+		// Older INI files contain paths in the system language
+		if (!ParsePerfPath (LocalPathToEnglish (oCounter.sPath), sEnglishMachine, sEnglishObject, sEnglishInstance, sEnglishCounter))
+		{
+			sEnglishCounter	= sCounter;
+		}
+
+		sLabel	= GetInvertPrefix (oCounter) + sCounter;
+		for (int i = 0; i < _countof (aasInverted); i++)
+		{
+			if (sEnglishCounter.CompareNoCase (aasInverted[i][0]) == 0)
+			{
+				sLabel	= aasInverted[i][1];
+				break;
+			}
+		}
+	}
+
+	if (bWithInstance && !sInstance.IsEmpty ())
+	{
+		sLabel	+= TEXT (" (") + sInstance + TEXT (")");
+	}
+
+	return sLabel;
+}
+
 void SetDefaultMeterSettings (MeterSettings& oMeter, int nId)
 {
 	oMeter.nId				= nId;
@@ -217,6 +299,7 @@ void SetDefaultMeterSettings (MeterSettings& oMeter, int nId)
 
 	SetDefaultCounterSettings (oMeter.oCounter);
 	oMeter.oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
+	oMeter.oCounter.bInvert	= DEFAULT_COUNTER_1_INVERT;
 }
 
 void SetDefaultSettings (DiskLEDSettings& oSettings)
@@ -291,7 +374,8 @@ void NormalizeMeterSettings (MeterSettings& oMeter)
 
 	if (oCounter.sPath.IsEmpty ())
 	{
-		oCounter.sPath	= DEFAULT_COUNTER_1_PATH;
+		oCounter.sPath		= DEFAULT_COUNTER_1_PATH;
+		oCounter.bInvert	= DEFAULT_COUNTER_1_INVERT;
 	}
 	if (!(oCounter.d100Percent > 0.0) || !_finite (oCounter.d100Percent) || oCounter.d100Percent > MAX_100PERCENT)
 	{
