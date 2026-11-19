@@ -62,9 +62,13 @@ public:
 	void	UpdateSettings (const MeterSettings& oSettings);
 
 	// The counter in the shared query. Connect returns a PDH error, with the reason in sError.
+	// A graphics adapter temperature is not in the query: Connect only checks that the adapter can be read (the error is then a Windows error code).
 	DWORD	Connect (PDH_HQUERY hQuery, CString& sError);
 	void	Disconnect ();
-	BOOL	IsConnected () const	{ return m_hCounter != NULL; }
+	BOOL	IsConnected () const	{ return m_bGpu ? m_bGpuConnected : m_hCounter != NULL; }
+
+	// Does the meter use the shared PDH query? (Not so a graphics adapter temperature.)
+	BOOL	UsesPdh () const		{ return !m_bGpu; }
 
 	// Ticks until the next reading is due (0 = due now)
 	DWORD	GetTimeToNextSample (DWORD nTick) const;
@@ -102,6 +106,11 @@ private:
 	PDH_HCOUNTER	m_hCounter;
 	PDH_RAW_COUNTER	m_oRawPrevious;		// The raw value of the previous reading, the value is computed from it and the current one
 	BOOL			m_bHaveRaw;			// m_oRawPrevious is valid
+	double			m_dFactor;			// The counter value is multiplied by this and m_dOffset is added (a temperature in Kelvin becomes Celsius)
+	double			m_dOffset;
+	BOOL			m_bGpu;				// The meter shows the temperature of a graphics adapter (read directly, not with PDH)
+	BOOL			m_bGpuConnected;	// ... and the adapter could be read the last time
+	CString			m_sGpuAdapter;
 	DWORD			m_nNextSampleTick;	// Tick count when the next reading is due
 	DWORD			m_nTooltipTick;		// Tick count of the last tooltip update, 0 = update with the next reading
 	int				m_nBadSamples;		// Consecutive samples that could not be used
@@ -110,6 +119,8 @@ private:
 	CString			m_sDisplayName;		// The counter name with instance, see GetCounterDisplayName. Kept because the tooltip is updated often.
 
 	void	ResetState ();
+	int		ApplyValue (double dValue, DWORD nTick);
+	void	UpdateSource ();
 	void	UpdateCeiling ();
 	CString	GetName () const;
 	CString	GetTooltipPrefix () const;

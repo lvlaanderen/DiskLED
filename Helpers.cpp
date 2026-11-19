@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Helpers.h"
 #include "Settings.h"
+#include "GpuSensor.h"
 #include <pdh.h>
 #include <PDHMsg.h>
 #include <iphlpapi.h>
@@ -482,50 +483,66 @@ static BOOL IsValidEnglishPath (const CString& sPath)
 	return bValid;
 }
 
-// Split a counter path like \Object(Instance)\Counter or \\Machine\Object(Instance)\Counter into its parts
+// Split a counter path like \Object(Instance)\Counter or \\Machine\Object(Instance)\Counter into its parts.
+// An instance name can contain backslashes (e.g. \Thermal Zone Information(\_SB.TZ03)\Temperature): it ends at the last ")\".
 BOOL ParsePerfPath (const CString& sPath, CString& sMachine, CString& sObject, CString& sInstance, CString& sCounter)
 {
-	CStringArray	asElements;
-	CString			sObjectAndInstance;
+	CString	sRest	= sPath;
 
 	sMachine.Empty ();
 	sObject.Empty ();
 	sInstance.Empty ();
 	sCounter.Empty ();
 
-	if (!Split (TEXT ("\\"), sPath, &asElements))
+	if (sRest.Left (2) == TEXT ("\\\\"))
+	{
+		int	nEnd	= sRest.Find ('\\', 2);
+
+		if (nEnd < 0)
+		{
+			return FALSE;
+		}
+		sMachine	= sRest.Mid (2, nEnd - 2);
+		sRest		= sRest.Mid (nEnd);
+	}
+	if (sRest.IsEmpty () || sRest[0] != '\\')
 	{
 		return FALSE;
 	}
-	if (asElements.GetSize () == 3)
+	sRest	= sRest.Mid (1);
+
+	int	nOpen		= sRest.Find ('(');
+	int	nSeparator	= sRest.Find ('\\');
+
+	if (nOpen >= 0 && (nSeparator < 0 || nOpen < nSeparator))
 	{
-		sObjectAndInstance	= asElements.GetAt (1);
-		sCounter			= asElements.GetAt (2);
+		// Object(Instance)\Counter
+		int	nClose	= sRest.ReverseFind (')');
+
+		while (nClose > nOpen && (nClose + 1 >= sRest.GetLength () || sRest[nClose + 1] != '\\'))
+		{
+			nClose	= (nClose > 0) ? sRest.Left (nClose).ReverseFind (')') : -1;
+		}
+		if (nClose <= nOpen)
+		{
+			return FALSE;
+		}
+		sObject		= sRest.Left (nOpen);
+		sInstance	= sRest.Mid (nOpen + 1, nClose - nOpen - 1);
+		sCounter	= sRest.Mid (nClose + 2);
 	}
-	else if (asElements.GetSize () == 5)
+	else if (nSeparator >= 0)
 	{
-		sMachine			= asElements.GetAt (2);
-		sObjectAndInstance	= asElements.GetAt (3);
-		sCounter			= asElements.GetAt (4);
+		sObject		= sRest.Left (nSeparator);
+		sCounter	= sRest.Mid (nSeparator + 1);
 	}
 	else
 	{
 		return FALSE;
 	}
 
-	// Separate object from instance, e.g.: PhysicalDisk(_Total)
-	int	nIndex	= sObjectAndInstance.Find ('(');
-	if (nIndex != -1)
-	{
-		sObject		= sObjectAndInstance.Left (nIndex);
-		sInstance	= sObjectAndInstance.Mid (nIndex + 1, sObjectAndInstance.GetLength () - nIndex - 2);
-	}
-	else
-	{
-		sObject		= sObjectAndInstance;
-	}
-
-	return TRUE;
+	// A counter name has no backslash
+	return !sObject.IsEmpty () && !sCounter.IsEmpty () && sCounter.Find ('\\') < 0;
 }
 
 CString MakePerfPath (const CString& sMachine, const CString& sObject, const CString& sInstance, const CString& sCounter)
@@ -587,10 +604,85 @@ CString EnglishPathToLocal (const CString& sPath)
 }
 
 
-// Is this a valid counter path when interpreted as English?
+// Is this a valid counter path when interpreted as English? (A graphics adapter temperature is valid if the adapter reports one.)
 BOOL IsValidEnglishCounterPath (const CString& sPath)
 {
+	CString	sAdapter;
+
+	if (IsGpuPath (sPath, &sAdapter))
+	{
+		double	dCelsius	= 0;
+
+		return ReadGpuTemperature (sAdapter, dCelsius);
+	}
+
 	return IsValidEnglishPath (sPath);
+}
+
+// Thermal zone temperatures are reported in Kelvin: whole degrees by "Temperature", tenths of a degree by "High Precision Temperature"
+BOOL GetCelsiusConversion (const CString& sPath, double& dFactor, double& dOffset)
+{
+	CString	sMachine;
+	CString	sObject;
+	CString	sInstance;
+	CString	sCounter;
+
+	dFactor	= 1;
+	dOffset	= 0;
+
+	if (!ParsePerfPath (LocalPathToEnglish (sPath), sMachine, sObject, sInstance, sCounter) || sObject.CompareNoCase (TEXT ("Thermal Zone Information")) != 0)
+	{
+		return FALSE;
+	}
+	if (sCounter.CompareNoCase (TEXT ("High Precision Temperature")) == 0)
+	{
+		dFactor	= 0.1;
+	}
+	else if (sCounter.CompareNoCase (TEXT ("Temperature")) != 0)
+	{
+		return FALSE;
+	}
+	dOffset	= -273.15;
+
+	return TRUE;
+}
+
+// The current temperature of a thermal zone (an instance of "Thermal Zone Information"), in degrees Celsius
+BOOL GetThermalZoneCelsius (const CString& sInstance, double& dCelsius)
+{
+	PDH_HQUERY		hQuery		= NULL;
+	PDH_HCOUNTER	hCounter	= NULL;
+	BOOL			bResult		= FALSE;
+	CString			sPath		= MakePerfPath (TEXT (""), TEXT ("Thermal Zone Information"), sInstance, TEXT ("High Precision Temperature"));
+	double			dFactor		= 1;
+	double			dOffset		= 0;
+
+	dCelsius	= 0;
+
+	if (!GetCelsiusConversion (sPath, dFactor, dOffset))
+	{
+		return FALSE;
+	}
+
+	if (PdhOpenQuery (NULL, 0, &hQuery) == ERROR_SUCCESS)
+	{
+		if (PdhAddEnglishCounter (hQuery, sPath, 0, &hCounter) == ERROR_SUCCESS && PdhCollectQueryData (hQuery) == ERROR_SUCCESS)
+		{
+			PDH_FMT_COUNTERVALUE	oValue;
+
+			if (PdhGetFormattedCounterValue (hCounter, PDH_FMT_DOUBLE, NULL, &oValue) == ERROR_SUCCESS
+				&& (oValue.CStatus == PDH_CSTATUS_VALID_DATA || oValue.CStatus == PDH_CSTATUS_NEW_DATA))
+			{
+				dCelsius	= oValue.doubleValue * dFactor + dOffset;
+
+				// A zone that reports 0 Kelvin has no sensor
+				bResult		= (dCelsius > -100.0);
+			}
+		}
+		PdhCloseQuery (hQuery);
+	}
+
+	return bResult;
 }
 
 // Center a window on the monitor with the mouse pointer. The hidden main window is no place to center on, it can be on another monitor.

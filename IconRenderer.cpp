@@ -196,6 +196,18 @@ void GetValueParts (DWORD nValueFormat, double dValue, double dScale, double& dN
 		sUnit		= asMBytes[nUnit];
 		sIconUnit	= asIconMBytes[nUnit];
 	}
+	else if (nValueFormat == VALUEFORMAT_CELSIUS)
+	{
+		dNumber		= dValue;
+		sUnit		= TEXT ("\u00B0C");
+		sIconUnit	= TEXT ("C");
+	}
+	else if (nValueFormat == VALUEFORMAT_FAHRENHEIT)
+	{
+		dNumber		= dValue * 9.0 / 5.0 + 32.0;
+		sUnit		= TEXT ("\u00B0F");
+		sIconUnit	= TEXT ("F");
+	}
 	else if (nValueFormat == VALUEFORMAT_NUMBER)
 	{
 		dNumber		= dValue;
@@ -268,7 +280,7 @@ CString FormatScaleValue (DWORD nValueFormat, double dValue)
 {
 	CString	sResult;
 
-	if (nValueFormat == VALUEFORMAT_BYTES || nValueFormat == VALUEFORMAT_BITS || nValueFormat == VALUEFORMAT_MBYTES)
+	if (nValueFormat == VALUEFORMAT_BYTES || nValueFormat == VALUEFORMAT_BITS || nValueFormat == VALUEFORMAT_MBYTES || IsTemperatureFormat (nValueFormat))
 	{
 		CString	sUnit;
 		CString	sIconUnit;
@@ -343,6 +355,32 @@ BOOL ParseScaleValue (DWORD nValueFormat, const CString& sText, double& dValue)
 	double	dFactor		= 1;
 
 	sUnit.Trim ();
+	if (IsTemperatureFormat (nValueFormat))
+	{
+		// A number without a unit is in the unit of the format. "C" and "F" (with or without the degree sign) are always understood.
+		BOOL	bFahrenheit	= (nValueFormat == VALUEFORMAT_FAHRENHEIT);
+
+		if (sUnit.Left (1) == TEXT ("\u00B0"))
+		{
+			sUnit	= sUnit.Mid (1);
+		}
+		if (sUnit.CompareNoCase (TEXT ("F")) == 0)
+		{
+			bFahrenheit	= TRUE;
+		}
+		else if (sUnit.CompareNoCase (TEXT ("C")) == 0)
+		{
+			bFahrenheit	= FALSE;
+		}
+		else if (!sUnit.IsEmpty ())
+		{
+			return FALSE;
+		}
+
+		dValue	= bFahrenheit ? (dNumber - 32.0) * 5.0 / 9.0 : dNumber;
+
+		return TRUE;
+	}
 	if (!sUnit.IsEmpty ())
 	{
 		if (nValueFormat == VALUEFORMAT_BYTES || nValueFormat == VALUEFORMAT_BITS)

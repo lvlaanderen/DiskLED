@@ -7,6 +7,7 @@
 #include "DialogWizard.h"
 #include "DialogMessage.h"
 #include "Helpers.h"
+#include "GpuSensor.h"
 #include <math.h>
 
 
@@ -16,8 +17,10 @@
 #define WHAT_DISK			2
 #define WHAT_PROCESSOR		3
 #define WHAT_MEMORY			4
-#define WHAT_OTHER			5
-#define WHAT_IMPORT			6
+#define WHAT_TEMPERATURE	5
+#define WHAT_GPU			6
+#define WHAT_OTHER			7
+#define WHAT_IMPORT			8
 
 struct WhatEntry
 {
@@ -34,6 +37,8 @@ static const WhatEntry g_aWhat[] =
 	{ TEXT ("Disk activity"),			TEXT ("How busy a disk is, like the activity light of a computer."),										TEXT ("Disk"),		LEDTYPE_FLICKER },
 	{ TEXT ("Processor use"),			TEXT ("How hard the processor is working."),																TEXT ("Processor"),	LEDTYPE_COLOREDBAR },
 	{ TEXT ("Memory in use"),			TEXT ("How much of the memory of the computer is in use."),													TEXT ("Memory"),	LEDTYPE_CLEANBAR },
+	{ TEXT ("Computer temperature"),	TEXT ("How warm a part of the computer is, for example around the processor. The sensors are the ones the computer itself reports, no extra software is needed."),	TEXT ("Temperature"),	LEDTYPE_NUMBER },
+	{ TEXT ("Graphics card temperature"),	TEXT ("How warm the graphics card is. Only graphics cards whose driver reports a temperature are listed, usually separate cards and not the graphics built into the processor."),	TEXT ("Graphics"),	LEDTYPE_NUMBER },
 	{ TEXT ("Another counter..."),		TEXT ("Choose any performance counter yourself, with the lists in the settings window."),					TEXT (""),			LEDTYPE_FLICKER },
 	{ TEXT ("Import from an older DiskLED..."),	TEXT ("Take over the meters of older copies of DiskLED, for example if you ran one copy for every counter."),	TEXT (""),	LEDTYPE_FLICKER }
 };
@@ -231,6 +236,14 @@ void CDialogWizard::ShowStep (int nStep)
 			sTitle	= TEXT ("Which disk?");
 			sHint	= TEXT ("\"All disks\" shows the activity of all of them together.");
 			break;
+		case WHAT_TEMPERATURE:
+			sTitle	= TEXT ("Which sensor?");
+			sHint	= TEXT ("The computer names its sensors itself, so the names say little. Pick the one that gets warmer when the computer works hard, for example the processor.");
+			break;
+		case WHAT_GPU:
+			sTitle	= TEXT ("Which graphics card?");
+			sHint	= TEXT ("Only graphics cards that report a temperature are listed.");
+			break;
 		default:
 			sTitle	= TEXT ("Which processor?");
 			sHint	= TEXT ("\"All processors\" shows the use of the whole processor. A single processor is one core of it.");
@@ -286,6 +299,22 @@ void CDialogWizard::FillInstanceList ()
 	m_cList.ResetContent ();
 	m_asInstances.RemoveAll ();
 
+	// Graphics cards: only those that report a temperature, with the current value
+	if (m_nWhat == WHAT_GPU)
+	{
+		std::vector<GpuAdapter>	aAdapters;
+
+		GetGpuAdapters (aAdapters);
+		for (size_t i = 0; i < aAdapters.size (); i++)
+		{
+			m_cList.AddString (aAdapters[i].sName + TEXT ("  (") + FormatValue (GetDefaultTemperatureFormat (), aAdapters[i].dCelsius, 100, FALSE) + TEXT (")"));
+			m_asInstances.Add (aAdapters[i].sName);
+		}
+		m_cList.SetCurSel (0);
+
+		return;
+	}
+
 	switch (m_nWhat)
 	{
 	case WHAT_DOWNLOAD:
@@ -298,6 +327,9 @@ void CDialogWizard::FillInstanceList ()
 		sObject		= TEXT ("PhysicalDisk");
 		sFirst		= TEXT ("_Total");
 		sFirstText	= TEXT ("All disks");
+		break;
+	case WHAT_TEMPERATURE:
+		sObject		= TEXT ("Thermal Zone Information");
 		break;
 	default:
 		sObject		= TEXT ("Processor");
@@ -324,6 +356,18 @@ void CDialogWizard::FillInstanceList ()
 		if (m_nWhat == WHAT_PROCESSOR)
 		{
 			sText	= TEXT ("Processor ") + sText;
+		}
+		else if (m_nWhat == WHAT_TEMPERATURE)
+		{
+			// Zones without a sensor are left out. The current temperature tells the zones apart.
+			double	dCelsius	= 0;
+
+			if (!GetThermalZoneCelsius (asFound[i], dCelsius))
+			{
+				continue;
+			}
+			sText.TrimLeft (TEXT ("\\"));
+			sText	= sText + TEXT ("  (") + FormatValue (GetDefaultTemperatureFormat (), dCelsius, 100, FALSE) + TEXT (")");
 		}
 		m_cList.AddString (sText);
 		m_asInstances.Add (asFound[i]);
@@ -612,6 +656,10 @@ CString CDialogWizard::GetPath () const
 		return MakePerfPath (TEXT (""), TEXT ("PhysicalDisk"), m_sInstance, TEXT ("% Idle Time"));
 	case WHAT_PROCESSOR:
 		return MakePerfPath (TEXT (""), TEXT ("Processor"), m_sInstance, TEXT ("% Processor Time"));
+	case WHAT_TEMPERATURE:
+		return MakePerfPath (TEXT (""), TEXT ("Thermal Zone Information"), m_sInstance, TEXT ("High Precision Temperature"));
+	case WHAT_GPU:
+		return MakeGpuPath (m_sInstance);
 	}
 
 	return MakePerfPath (TEXT (""), TEXT ("Memory"), TEXT (""), TEXT ("% Committed Bytes In Use"));
@@ -663,6 +711,7 @@ void CDialogWizard::UpdatePreview ()
 {
 	MeterSettings	oMeter;
 	BOOL			bSpeed	= (m_nWhat == WHAT_DOWNLOAD || m_nWhat == WHAT_UPLOAD);
+	BOOL			bTemp	= (m_nWhat == WHAT_TEMPERATURE || m_nWhat == WHAT_GPU);
 	double			dMax	= bSpeed ? 12500000 : 100;
 	double			dValue;
 
@@ -677,7 +726,7 @@ void CDialogWizard::UpdatePreview ()
 	m_oPreview.adHistory[HISTORY_SIZE - 1]	= dValue;
 	m_oPreview.dValue						= dValue;
 	m_oPreview.dScale						= dMax;
-	m_oPreview.nValueFormat					= bSpeed ? VALUEFORMAT_BITS : VALUEFORMAT_PERCENT;
+	m_oPreview.nValueFormat					= bSpeed ? VALUEFORMAT_BITS : (bTemp ? GetDefaultTemperatureFormat () : VALUEFORMAT_PERCENT);
 
 	if (m_cPreview.m_hWnd)
 	{
