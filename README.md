@@ -62,7 +62,7 @@ The file can be edited by hand while DiskLED is not running. Every meter has a s
 DiskLED shows temperatures without extra software or drivers, from the sensors that Windows already knows about:
 
 - **Computer temperature:** the ACPI thermal zones of the computer (`\Thermal Zone Information(<zone>)\Temperature` or `\High Precision Temperature`). Which parts of the computer they measure depends on the manufacturer; often one is near the processor. They are not the temperature of the processor cores, which Windows cannot read without a driver. The wizard lists the zones with their current temperature and leaves out zones without a sensor.
-- **Graphics card temperature:** the temperature that the graphics driver reports to Windows, the same as in Task Manager. Usually only separate graphics cards report one, not the graphics built into the processor. The wizard only lists cards that report a temperature.
+- **Graphics card temperature:** the temperature that the graphics driver reports to Windows, the same as in Task Manager. Whether a temperature is available depends on the graphics card and its driver; on some computers there is none. The wizard only lists cards that report a temperature.
 
 Temperatures are shown in Celsius or Fahrenheit (`ValueFormat`); a new meter uses the unit of your region. A full icon is 100 °C, and the 100% field accepts `212 F` or `100 C`. The sensors are read once a second.
 

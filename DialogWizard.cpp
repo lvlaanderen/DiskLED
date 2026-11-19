@@ -38,7 +38,7 @@ static const WhatEntry g_aWhat[] =
 	{ TEXT ("Processor use"),			TEXT ("How hard the processor is working."),																TEXT ("Processor"),	LEDTYPE_COLOREDBAR },
 	{ TEXT ("Memory in use"),			TEXT ("How much of the memory of the computer is in use."),													TEXT ("Memory"),	LEDTYPE_CLEANBAR },
 	{ TEXT ("Computer temperature"),	TEXT ("How warm a part of the computer is, for example around the processor. The sensors are the ones the computer itself reports, no extra software is needed."),	TEXT ("Temperature"),	LEDTYPE_NUMBER },
-	{ TEXT ("Graphics card temperature"),	TEXT ("How warm the graphics card is. Only graphics cards whose driver reports a temperature are listed, usually separate cards and not the graphics built into the processor."),	TEXT ("Graphics"),	LEDTYPE_NUMBER },
+	{ TEXT ("Graphics card temperature"),	TEXT ("How warm the graphics card is. Only graphics cards whose driver reports a temperature are listed. On some computers no temperature is available."),	TEXT ("Graphics"),	LEDTYPE_NUMBER },
 	{ TEXT ("Another counter..."),		TEXT ("Choose any performance counter yourself, with the lists in the settings window."),					TEXT (""),			LEDTYPE_FLICKER },
 	{ TEXT ("Import from an older DiskLED..."),	TEXT ("Take over the meters of older copies of DiskLED, for example if you ran one copy for every counter."),	TEXT (""),	LEDTYPE_FLICKER }
 };
